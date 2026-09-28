@@ -1,0 +1,17 @@
+[Script Info]
+Title: Professional Vertical Title
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: VerticalPro,山海若诗楷 75W,180,&H0000FFFF,,&H00000000,,0,0,0,0,100,100,0,0,1,3,0,7,0,0,0,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:10.00,VerticalPro,,0,0,0,,{\pos(850,110)}早
+Dialogue: 0,0:00:00.00,0:00:10.00,VerticalPro,,0,0,0,,{\pos(850,296)}安
+Dialogue: 0,0:00:00.00,0:00:10.00,VerticalPro,,0,0,0,,{\pos(850,482)}上
+Dialogue: 0,0:00:00.00,0:00:10.00,VerticalPro,,0,0,0,,{\pos(850,668)}饶

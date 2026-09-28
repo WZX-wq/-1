@@ -1,0 +1,21 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: TitleStyle,三极行楷简体-粗,80,&H0000FFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,7,0,0,0,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:10.00,TitleStyle,,0,0,0,,{\pos(37.6,362.7)\frz29.0}2
+Dialogue: 0,0:00:00.00,0:00:10.00,TitleStyle,,0,0,0,,{\pos(84.6,339.7)\frz23.0}0
+Dialogue: 0,0:00:00.00,0:00:10.00,TitleStyle,,0,0,0,,{\pos(133.8,321.8)\frz17.0}2
+Dialogue: 0,0:00:00.00,0:00:10.00,TitleStyle,,0,0,0,,{\pos(184.6,309.2)\frz11.0}5
+Dialogue: 0,0:00:00.00,0:00:10.00,TitleStyle,,0,0,0,,{\pos(253.8,300.7)\frz3.0}年
+Dialogue: 0,0:00:00.00,0:00:10.00,TitleStyle,,0,0,0,,{\pos(323.6,301.9)\frz-5.0}7
+Dialogue: 0,0:00:00.00,0:00:10.00,TitleStyle,,0,0,0,,{\pos(392.5,312.8)\frz-13.0}月
+Dialogue: 0,0:00:00.00,0:00:10.00,TitleStyle,,0,0,0,,{\pos(459.2,333.2)\frz-21.0}8
+Dialogue: 0,0:00:00.00,0:00:10.00,TitleStyle,,0,0,0,,{\pos(522.4,362.7)\frz-29.0}日
+Dialogue: 0,0:00:00.00,0:00:10.00,TitleStyle,,0,0,0,,{\pos(112.0,500)}农历六月十四

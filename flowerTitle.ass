@@ -1,0 +1,84 @@
+[Script Info]
+        Title: Default Aegisub file
+        ScriptType: v4.00+
+        WrapStyle: 0
+        ScaledBorderAndShadow: yes
+        YCbCr Matrix: None
+
+        [V4+ Styles] Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+        Style: Default,江西拙楷,30,&HFFFFFF,&HFFFFFF,&H000000,&H000000,1,0,0,0,100,100,10,0,1,1,0,2,10,10,-50,65001  # 注意参数顺序和数量
+        Style: VerticalPro,@江西拙楷,30,&HFFFFFF,&HFFFFFF,&H000000,&H000000,1,0,0,0,100,100,10,0,1,1,0,2,10,10,-50,65001
+        [Events]
+        Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+        
+Dialogue: 0,0:00:00.00,0:00:08.00,Default,,0,0,0,,{\fs20\an2\pos(190,60)\Y1\t(0,416,\c&H0000FF)\t(416,832,\c&H00FFFF)\t(832,1248,\c&H00FF00)\t(1248,1664,\c&HFFFF00)\t(1664,2080,\c&HFF0000)\t(2080,2496,\c&HFF00FF)\t(2500,2916,\c&H0000FF)\t(2916,3332,\c&H00FFFF)\t(3332,3748,\c&H00FF00)\t(3748,4164,\c&HFFFF00)\t(4164,4580,\c&HFF0000)\t(4580,4996,\c&HFF00FF)\t(5000,5416,\c&H0000FF)\t(5416,5832,\c&H00FFFF)\t(5832,6248,\c&H00FF00)\t(6248,6664,\c&HFFFF00)\t(6664,7080,\c&HFF0000)\t(7080,7496,\c&HFF00FF)\t(7500,7916,\c&H0000FF)\t(7916,8332,\c&H00FFFF)\t(8332,8748,\c&H00FF00)\t(8748,9164,\c&HFFFF00)\t(9164,9580,\c&HFF0000)\t(9580,9996,\c&HFF00FF)} 祝您\N
+[Script Info]
+        Title: Default Aegisub file
+        ScriptType: v4.00+
+        WrapStyle: 0
+        ScaledBorderAndShadow: yes
+        YCbCr Matrix: None
+
+        [V4+ Styles] Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+        Style: Default,江西拙楷,30,&HFFFFFF,&HFFFFFF,&H000000,&H000000,1,0,0,0,100,100,10,0,1,1,0,2,10,10,-50,65001  # 注意参数顺序和数量
+        Style: VerticalPro,@江西拙楷,30,&HFFFFFF,&HFFFFFF,&H000000,&H000000,1,0,0,0,100,100,10,0,1,1,0,2,10,10,-50,65001
+        [Events]
+        Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+        
+Dialogue: 0,0:00:00.00,0:00:08.00,Default,,0,0,0,,{\fs20\an2\pos(190,90)\Y1\t(0,416,\c&H0000FF)\t(416,832,\c&H00FFFF)\t(832,1248,\c&H00FF00)\t(1248,1664,\c&HFFFF00)\t(1664,2080,\c&HFF0000)\t(2080,2496,\c&HFF00FF)\t(2500,2916,\c&H0000FF)\t(2916,3332,\c&H00FFFF)\t(3332,3748,\c&H00FF00)\t(3748,4164,\c&HFFFF00)\t(4164,4580,\c&HFF0000)\t(4580,4996,\c&HFF00FF)\t(5000,5416,\c&H0000FF)\t(5416,5832,\c&H00FFFF)\t(5832,6248,\c&H00FF00)\t(6248,6664,\c&HFFFF00)\t(6664,7080,\c&HFF0000)\t(7080,7496,\c&HFF00FF)\t(7500,7916,\c&H0000FF)\t(7916,8332,\c&H00FFFF)\t(8332,8748,\c&H00FF00)\t(8748,9164,\c&HFFFF00)\t(9164,9580,\c&HFF0000)\t(9580,9996,\c&HFF00FF)} 身体倍儿棒\N
+[Script Info]
+        Title: Default Aegisub file
+        ScriptType: v4.00+
+        WrapStyle: 0
+        ScaledBorderAndShadow: yes
+        YCbCr Matrix: None
+
+        [V4+ Styles] Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+        Style: Default,江西拙楷,30,&HFFFFFF,&HFFFFFF,&H000000,&H000000,1,0,0,0,100,100,10,0,1,1,0,2,10,10,-50,65001  # 注意参数顺序和数量
+        Style: VerticalPro,@江西拙楷,30,&HFFFFFF,&HFFFFFF,&H000000,&H000000,1,0,0,0,100,100,10,0,1,1,0,2,10,10,-50,65001
+        [Events]
+        Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+        
+Dialogue: 0,0:00:00.00,0:00:08.00,Default,,0,0,0,,{\fs20\an2\pos(190,120)\Y1\t(0,416,\c&H0000FF)\t(416,832,\c&H00FFFF)\t(832,1248,\c&H00FF00)\t(1248,1664,\c&HFFFF00)\t(1664,2080,\c&HFF0000)\t(2080,2496,\c&HFF00FF)\t(2500,2916,\c&H0000FF)\t(2916,3332,\c&H00FFFF)\t(3332,3748,\c&H00FF00)\t(3748,4164,\c&HFFFF00)\t(4164,4580,\c&HFF0000)\t(4580,4996,\c&HFF00FF)\t(5000,5416,\c&H0000FF)\t(5416,5832,\c&H00FFFF)\t(5832,6248,\c&H00FF00)\t(6248,6664,\c&HFFFF00)\t(6664,7080,\c&HFF0000)\t(7080,7496,\c&HFF00FF)\t(7500,7916,\c&H0000FF)\t(7916,8332,\c&H00FFFF)\t(8332,8748,\c&H00FF00)\t(8748,9164,\c&HFFFF00)\t(9164,9580,\c&HFF0000)\t(9580,9996,\c&HFF00FF)} 好运滚滚来\N
+[Script Info]
+        Title: Default Aegisub file
+        ScriptType: v4.00+
+        WrapStyle: 0
+        ScaledBorderAndShadow: yes
+        YCbCr Matrix: None
+
+        [V4+ Styles] Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+        Style: Default,江西拙楷,30,&HFFFFFF,&HFFFFFF,&H000000,&H000000,1,0,0,0,100,100,10,0,1,1,0,2,10,10,-50,65001  # 注意参数顺序和数量
+        Style: VerticalPro,@江西拙楷,30,&HFFFFFF,&HFFFFFF,&H000000,&H000000,1,0,0,0,100,100,10,0,1,1,0,2,10,10,-50,65001
+        [Events]
+        Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+        
+Dialogue: 0,0:00:00.00,0:00:08.00,Default,,0,0,0,,{\fs20\an2\pos(190,150)\Y1\t(0,416,\c&H0000FF)\t(416,832,\c&H00FFFF)\t(832,1248,\c&H00FF00)\t(1248,1664,\c&HFFFF00)\t(1664,2080,\c&HFF0000)\t(2080,2496,\c&HFF00FF)\t(2500,2916,\c&H0000FF)\t(2916,3332,\c&H00FFFF)\t(3332,3748,\c&H00FF00)\t(3748,4164,\c&HFFFF00)\t(4164,4580,\c&HFF0000)\t(4580,4996,\c&HFF00FF)\t(5000,5416,\c&H0000FF)\t(5416,5832,\c&H00FFFF)\t(5832,6248,\c&H00FF00)\t(6248,6664,\c&HFFFF00)\t(6664,7080,\c&HFF0000)\t(7080,7496,\c&HFF00FF)\t(7500,7916,\c&H0000FF)\t(7916,8332,\c&H00FFFF)\t(8332,8748,\c&H00FF00)\t(8748,9164,\c&HFFFF00)\t(9164,9580,\c&HFF0000)\t(9580,9996,\c&HFF00FF)} 钱包鼓鼓的\N
+[Script Info]
+        Title: Default Aegisub file
+        ScriptType: v4.00+
+        WrapStyle: 0
+        ScaledBorderAndShadow: yes
+        YCbCr Matrix: None
+
+        [V4+ Styles] Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+        Style: Default,江西拙楷,30,&HFFFFFF,&HFFFFFF,&H000000,&H000000,1,0,0,0,100,100,10,0,1,1,0,2,10,10,-50,65001  # 注意参数顺序和数量
+        Style: VerticalPro,@江西拙楷,30,&HFFFFFF,&HFFFFFF,&H000000,&H000000,1,0,0,0,100,100,10,0,1,1,0,2,10,10,-50,65001
+        [Events]
+        Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+        
+Dialogue: 0,0:00:00.00,0:00:08.00,Default,,0,0,0,,{\fs20\an2\pos(190,180)\Y1\t(0,416,\c&H0000FF)\t(416,832,\c&H00FFFF)\t(832,1248,\c&H00FF00)\t(1248,1664,\c&HFFFF00)\t(1664,2080,\c&HFF0000)\t(2080,2496,\c&HFF00FF)\t(2500,2916,\c&H0000FF)\t(2916,3332,\c&H00FFFF)\t(3332,3748,\c&H00FF00)\t(3748,4164,\c&HFFFF00)\t(4164,4580,\c&HFF0000)\t(4580,4996,\c&HFF00FF)\t(5000,5416,\c&H0000FF)\t(5416,5832,\c&H00FFFF)\t(5832,6248,\c&H00FF00)\t(6248,6664,\c&HFFFF00)\t(6664,7080,\c&HFF0000)\t(7080,7496,\c&HFF00FF)\t(7500,7916,\c&H0000FF)\t(7916,8332,\c&H00FFFF)\t(8332,8748,\c&H00FF00)\t(8748,9164,\c&HFFFF00)\t(9164,9580,\c&HFF0000)\t(9580,9996,\c&HFF00FF)} 一生平安顺遂\N
+[Script Info]
+        Title: Default Aegisub file
+        ScriptType: v4.00+
+        WrapStyle: 0
+        ScaledBorderAndShadow: yes
+        YCbCr Matrix: None
+
+        [V4+ Styles] Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+        Style: Default,江西拙楷,30,&HFFFFFF,&HFFFFFF,&H000000,&H000000,1,0,0,0,100,100,10,0,1,1,0,2,10,10,-50,65001  # 注意参数顺序和数量
+        Style: VerticalPro,@江西拙楷,30,&HFFFFFF,&HFFFFFF,&H000000,&H000000,1,0,0,0,100,100,10,0,1,1,0,2,10,10,-50,65001
+        [Events]
+        Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+        
+Dialogue: 0,0:00:00.00,0:00:08.00,Default,,0,0,0,,{\fs20\an2\pos(190,210)\Y1\t(0,416,\c&H0000FF)\t(416,832,\c&H00FFFF)\t(832,1248,\c&H00FF00)\t(1248,1664,\c&HFFFF00)\t(1664,2080,\c&HFF0000)\t(2080,2496,\c&HFF00FF)\t(2500,2916,\c&H0000FF)\t(2916,3332,\c&H00FFFF)\t(3332,3748,\c&H00FF00)\t(3748,4164,\c&HFFFF00)\t(4164,4580,\c&HFF0000)\t(4580,4996,\c&HFF00FF)\t(5000,5416,\c&H0000FF)\t(5416,5832,\c&H00FFFF)\t(5832,6248,\c&H00FF00)\t(6248,6664,\c&HFFFF00)\t(6664,7080,\c&HFF0000)\t(7080,7496,\c&HFF00FF)\t(7500,7916,\c&H0000FF)\t(7916,8332,\c&H00FFFF)\t(8332,8748,\c&H00FF00)\t(8748,9164,\c&HFFFF00)\t(9164,9580,\c&HFF0000)\t(9580,9996,\c&HFF00FF)} 富贵无忧\N

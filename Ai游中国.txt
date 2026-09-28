@@ -1,0 +1,139 @@
+{
+    "title_set": {
+        "fontFamily": "Aa旺财招牌体",
+        "fontBorderSize": 1,
+        "shadowDepth": 0,
+        "fontBold": 1,
+        "fontColor": "#FFFFFF",
+        "fontSize": 30,
+        "fontItalic": 0,
+        "borderColor": "#000000",
+        "fontScroll": 0,
+        "fontUnderline": 0,
+        "shadowColor": "#000000",
+        "titleTime": 3,
+        "titleLineSpace": 2,
+        "titleSpace": -50
+    },
+    "part_title_set": {
+        "fontFamily": "三极榜楷简体",
+        "fontBorderSize": 1,
+        "shadowDepth": 0,
+        "fontBold": 1,
+        "fontColor": "#FFFFFF",
+        "fontSize": 20,
+        "fontItalic": 0,
+        "borderColor": "#000000",
+        "fontScroll": 0,
+        "fontUnderline": 0,
+        "shadowColor": "#000000",
+        "titleTime": 3,
+        "titleLineSpace": 1,
+        "titleSpace": 160
+    },
+    "srt_set": {
+        "fontFamily": "Aa兰亭题诗 落笔如神",
+        "fontBorderSize": 1,
+        "shadowDepth": 0,
+        "fontBold": -1,
+        "fontColor": "#ffffff",
+        "fontSize": "16",
+        "fontItalic": 0,
+        "borderColor": "#000000",
+        "fontUnderline": 0,
+        "shadowColor": "#000000",
+        "position": 0
+    },
+    "voice_set": {
+        "api_type": 0,
+        "role_0": 4,
+        "spd_0": 25,
+        "vol_0": 10,
+        "role_1": 0,
+        "pit_1": 5,
+        "spd_1": 5,
+        "vol_1": 5
+    },
+    "water_set": {
+        "filePath": "D:/新水印片尾/AI游中国（白）.png",
+        "position": 1,
+        "zoom": 0.6,
+        "alpha": 1.0
+    },
+    "part_title_part_0_set": {
+        "fontColor": "#ffffff",
+        "borderColor": "#000000",
+        "fontSize": 15,
+        "fontScroll": 3,
+        "VSpace": 1,
+        "align": 0,
+        "x": 200,
+        "y": 100
+    },
+    "part_title_part_1_set": {
+        "fontColor": "#ffffff",
+        "borderColor": "#000000",
+        "fontSize": 15,
+        "fontScroll": 3,
+        "VSpace": 1,
+        "align": 0,
+        "x": 200,
+        "y": 130
+    },
+    "part_title_part_2_set": {
+        "fontColor": "#ffff00",
+        "borderColor": "#000000",
+        "fontSize": 15,
+        "fontScroll": 3,
+        "VSpace": 1,
+        "align": 0,
+        "x": 200,
+        "y": 160
+    },
+    "part_title_part_3_set": {
+        "fontColor": "#AB4A37",
+        "borderColor": "#ffffff",
+        "fontSize": 20,
+        "fontScroll": 0,
+        "VSpace": 1,
+        "align": 0,
+        "x": 0,
+        "y": 0
+    },
+    "part_title_part_4_set": {
+        "fontColor": "#ffff00",
+        "borderColor": "#000000",
+        "fontSize": 20,
+        "fontScroll": 0,
+        "VSpace": 1,
+        "align": 0,
+        "x": 0,
+        "y": 0
+    },
+    "part_title_part_5_set": {
+        "fontColor": "#ffff00",
+        "borderColor": "#000000",
+        "fontSize": 20,
+        "fontScroll": 0,
+        "VSpace": 1,
+        "align": 0,
+        "x": 0,
+        "y": 0
+    },
+    "end_video": {
+        "end_video_path": "D:/新水印片尾/Ai游中国.mp4"
+    },
+    "title_type": {
+        "type": 0
+    },
+    "video_type": {
+        "type": "7"
+    },
+    "account_location": {
+        "location": "中国"
+    },
+    "compression_set": {
+        "enabled": true,
+        "quality_level": "medium"
+    }
+}

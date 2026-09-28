@@ -1,0 +1,15 @@
+{
+  "position": "bottom-right",
+  "scale": 0.5,
+  "opacity": 1.0,
+  "duration": 2,
+  "positions": {
+    "center": "居中",
+    "top-left": "左上角",
+    "top-right": "右上角",
+    "bottom-left": "左下角",
+    "bottom-right": "右下角",
+    "top-center": "顶部居中",
+    "bottom-center": "底部居中"
+  }
+}

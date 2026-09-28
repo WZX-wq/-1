@@ -1,0 +1,14 @@
+[Script Info]
+        Title: Default Aegisub file
+        ScriptType: v4.00+
+        WrapStyle: 0
+        ScaledBorderAndShadow: yes
+        YCbCr Matrix: None
+
+        [V4+ Styles] Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+        Style: Default,三极榜楷简体,20,&HFFFFFF,&HFFFFFF,&H000000,&H000000,1,0,0,0,100,100,1,0,1,1,0,2,10,10,160,65001  # 注意参数顺序和数量
+        Style: VerticalPro,@三极榜楷简体,20,&HFFFFFF,&HFFFFFF,&H000000,&H000000,1,0,0,0,100,100,1,0,1,1,0,2,10,10,160,65001
+        [Events]
+        Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+        
+Dialogue: 0,00:00:00.00,00:00:06.00,Default,,0,0,0,,

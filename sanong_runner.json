@@ -1,0 +1,8 @@
+{
+  "screen": 0,
+  "random_video_model": true,
+  "create_upload_tasks": true,
+  "max_consecutive_system_failures": 3,
+  "minimum_free_space_mb": 1024,
+  "output_dir": "output"
+}
