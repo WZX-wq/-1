@@ -354,7 +354,9 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         self.pic_time = None
         self.part_title_part_setting = None
         self.setupUi(self)
-        self.all_setting_dict = read_dict_from_txt('setting.txt')
+        self.all_setting_dict = migrate_legacy_voice_setting(
+            read_dict_from_txt('setting.txt'), 'setting.txt'
+        )
         self.part_title_setting_win = None
         self.title_setting_win = None
         self.video_url = ''
@@ -13091,6 +13093,33 @@ def read_dict_from_txt(file_path):
     except Exception as e:
         print(f"读取字典时出错: {e}")
         return {}
+
+
+def migrate_legacy_voice_setting(settings, file_path='setting.txt'):
+    """Move old Edge-TTS defaults to Baidu for portable releases.
+
+    Existing installations keep their writable ``setting.txt`` when a new
+    package is extracted.  Older files therefore continued selecting Edge
+    TTS even after the bundled default changed to Baidu.  Migrate only the
+    legacy ``api_type=0`` value at startup so the next generation uses the
+    verified Baidu endpoint.
+    """
+    voice = settings.get('voice_set') if isinstance(settings, dict) else None
+    if not isinstance(voice, dict):
+        return settings
+    try:
+        is_legacy_edge = int(voice.get('api_type', 1)) == 0
+    except (TypeError, ValueError):
+        is_legacy_edge = False
+    if not is_legacy_edge:
+        return settings
+
+    voice['api_type'] = 1
+    try:
+        write_dict_to_txt(file_path, settings)
+    except OSError as error:
+        print(f'保存百度配音默认设置失败，将继续使用内存配置: {error}')
+    return settings
 
 
 def sec_to_ass(t: float) -> str:

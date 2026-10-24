@@ -31,6 +31,14 @@ class FullVersionAiConfigurationTests(unittest.TestCase):
             ["开场", "三清山", "云海壮观"],
         )
 
+    def test_legacy_edge_voice_setting_migrates_to_baidu(self):
+        import main
+        settings = {"voice_set": {"api_type": 0}}
+        with patch.object(main, "write_dict_to_txt") as write_setting:
+            migrated = main.migrate_legacy_voice_setting(settings, "setting.txt")
+        self.assertEqual(migrated["voice_set"]["api_type"], 1)
+        write_setting.assert_called_once_with("setting.txt", migrated)
+
     def test_legacy_function_names_use_configured_openai_compatible_endpoint(self):
         module = importlib.import_module("ai_tool.doubao_ai_production")
         completions = FakeCompletions()
