@@ -23,7 +23,7 @@ def _read_excel(*args, **kwargs):
     """Load pandas only when an AI workbook job actually starts."""
     import pandas as pd
 
-    return _read_excel(*args, **kwargs)
+    return pd.read_excel(*args, **kwargs)
 
 
 # ai分析文案 通用类

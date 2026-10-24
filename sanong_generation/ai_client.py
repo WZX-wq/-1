@@ -6,7 +6,7 @@ from typing import Callable
 
 from openai import OpenAI
 
-from ai_tool.runtime_config import get_ai_config
+from ai_tool.runtime_config import ConfiguredAIClient, get_ai_config
 
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
@@ -47,7 +47,9 @@ def _generate_json_array(
             "base_url": DEEPSEEK_BASE_URL,
             "model": DEEPSEEK_MODEL,
         }
-    client = client_factory(**config, timeout=90)
+    client = ConfiguredAIClient(client_factory(
+        api_key=config["api_key"], base_url=config["base_url"], timeout=90,
+    ), config)
     response = client.chat.completions.create(
         model=config["model"],
         messages=[{"role": "user", "content": prompt}],

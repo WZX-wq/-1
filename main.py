@@ -120,6 +120,7 @@ from openpyxl.workbook import Workbook
 
 from ai_tool.ai_text_production import write_arrays_to_excel, title_keyword, \
     ai_analyse_title_special_tag, ai_analyse_title_usual_tag
+from ai_tool.runtime_config import ai_error_message, get_ai_config, save_ai_config
 from database_tool.user_load_tool import add_user_task, get_account_by_name, update_image_user_by_id
 from database_tool.mysql_read_tool import fetch_with_retry
 from database_tool.material_download_tool import get_last_material_download_error
@@ -622,6 +623,13 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
 
         # ai设置切换
         self.aiSetButton.clicked.connect(self.setAiSet)
+        self.toolButton.clicked.connect(self.save_ai_settings)
+        self.label_13.setText('AI 接口设置')
+        self.aiAutoUpdateCheckBox = QtWidgets.QCheckBox('自动更新同档位模型', self.widget_23)
+        self.aiAutoUpdateCheckBox.setGeometry(40, 285, 175, 30)
+        self.aiAutoUpdateCheckBox.setStyleSheet('color: white;')
+        self.aiAutoUpdateCheckBox.setToolTip('每天首次 AI 任务检查同服务商、同系列和同档位的新版；验证可用后保存，失败时保留原模型')
+        self.load_ai_settings()
 
         # 分段切换
         self.oneOfNumComboBox.currentIndexChanged.connect(self.on_currentIndexChanged)
@@ -737,6 +745,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         self.tabWidget.setCurrentIndex(4)
 
     def setAiSet(self):
+        self.load_ai_settings()
         self.init_tab_pic()
         pic_folder = 'soft_pic'
         current_directory = os.getcwd()
@@ -745,6 +754,31 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         pic_path = os.path.join(pic_folder_path, '6-1.png')
         self.aiSetButton.setIcon(QIcon(QPixmap(pic_path)))
         self.tabWidget.setCurrentIndex(5)
+
+    def load_ai_settings(self):
+        try:
+            config = get_ai_config(require_key=False)
+        except RuntimeError as error:
+            self.add_log(str(error))
+            return
+        self.apiBaseUrlLineEdit.setText(config['base_url'])
+        self.aiModelNameLineEdit.setText(config['model'])
+        self.apiKeyLineEdit.setText(config['api_key'])
+        self.aiAutoUpdateCheckBox.setChecked(config['auto_update_model'])
+
+    def save_ai_settings(self):
+        try:
+            path = save_ai_config({
+                'base_url': self.apiBaseUrlLineEdit.text(),
+                'model': self.aiModelNameLineEdit.text(),
+                'api_key': self.apiKeyLineEdit.text(),
+                'auto_update_model': self.aiAutoUpdateCheckBox.isChecked(),
+            })
+            self.load_ai_settings()
+            self.add_log(f'AI 配置已保存并立即生效：{path}')
+            QMessageBox.information(self, 'AI 配置', '配置已保存，后续文案、话题和标签将使用此配置，无需重启。')
+        except (OSError, RuntimeError) as error:
+            QMessageBox.warning(self, 'AI 配置保存失败', str(error))
 
     def on_currentIndexChanged(self):
         self.showPartTitlePartOneSetting()
@@ -1606,7 +1640,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
 
     def on_error_occurred(self, error_message=''):
         self.error_flag = True
-        self.last_error_message = str(error_message or '未知错误')
+        self.last_error_message = ai_error_message(error_message) or str(error_message or '未知错误')
         self.add_log(f'处理失败：{self.last_error_message}')
         if is_memory_exhaustion(error_message):
             self._stop_auto_generation = True

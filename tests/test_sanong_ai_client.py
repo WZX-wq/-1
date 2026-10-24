@@ -1,5 +1,6 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from sanong_generation.ai_client import (
     generate_material_tags,
@@ -21,6 +22,13 @@ class FakeCompletions:
 
 
 class SanongAiClientTests(unittest.TestCase):
+    def setUp(self):
+        configured = patch('sanong_generation.ai_client.get_ai_config', return_value={
+            'api_key': 'test-key', 'base_url': 'https://api.deepseek.com', 'model': 'deepseek-flash',
+        })
+        configured.start()
+        self.addCleanup(configured.stop)
+
     def test_uses_verified_deepseek_flash_model_and_parses_json(self):
         completions = FakeCompletions('```json\n["开场", "正文"]\n```')
         factory_kwargs = {}

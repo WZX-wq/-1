@@ -1,5 +1,6 @@
 import hashlib
 import os
+import json
 import unittest
 from pathlib import Path
 
@@ -8,6 +9,25 @@ from PyInstaller.archive.readers import CArchiveReader
 
 
 class PackagedDependenciesTests(unittest.TestCase):
+    def test_private_key_is_embedded_without_external_credential_file(self):
+        executable = os.environ.get('PACKAGED_EXE_PATH')
+        private_config = os.environ.get('PACKAGED_PRIVATE_AI_CONFIG')
+        if not executable or not private_config:
+            self.skipTest('Set PACKAGED_EXE_PATH and PACKAGED_PRIVATE_AI_CONFIG for a private release')
+        import hmac
+        from types import ModuleType
+        archive = CArchiveReader(executable)
+        pyz = archive.open_embedded_archive(next(name for name in archive.toc if name.lower().endswith('.pyz')))
+        module = ModuleType('private_release_validation')
+        exec(pyz.extract('video_ai_embedded_config'), module.__dict__)
+        expected = json.loads(Path(private_config).read_text(encoding='utf-8-sig'))
+        self.assertTrue(hmac.compare_digest(module.SETTINGS['api_key'], expected['api_key']),
+                        'Embedded key does not match the private build configuration')
+        self.assertEqual(module.SETTINGS['model'], expected['model'])
+        self.assertTrue(module.SETTINGS['auto_update_model'])
+        self.assertFalse((Path(executable).parent / 'video_ai_config.json').exists(),
+                         'Private release must run without an external credential file')
+
     def test_qt_icu_dependencies_are_bundled(self):
         executable = os.environ.get("PACKAGED_EXE_PATH")
         if not executable:

@@ -2,6 +2,7 @@
 
 import os
 import sys
+import atexit
 
 from PyInstaller.utils.hooks import collect_submodules, copy_metadata
 
@@ -27,7 +28,14 @@ legacy_runtime_names = {
 
 # Spec-time helpers such as copy_metadata() and collect_submodules() use the
 # interpreter search path rather than Analysis.pathex.
-sys.path[:0] = [legacy_pyqt_dir, source_deps_dir]
+sys.path[:0] = [project_dir, legacy_pyqt_dir, source_deps_dir]
+
+# Public builds contain no key. Private builds explicitly opt in with a local
+# ignored config; only its temporary module goes into the EXE's PYZ archive.
+from tools.private_ai_build import create_private_ai_module, MODULE_NAME
+private_ai_module = create_private_ai_module(os.environ.get('VIDEO_AI_EMBED_CONFIG', ''))
+if private_ai_module is not None:
+    atexit.register(private_ai_module.cleanup)
 
 package_metadata = (
     copy_metadata('imageio')
@@ -36,6 +44,8 @@ package_metadata = (
     + copy_metadata('openai-whisper')
 )
 hidden_imports = ['xlrd'] + collect_submodules('mysql.connector')
+if private_ai_module is not None:
+    hidden_imports.append(MODULE_NAME)
 runtime_data = [
     ('tb.ico', '.'),
     ('video_ai_config.example.json', '.'),
@@ -61,7 +71,7 @@ runtime_data = [
 
 a = Analysis(
     ['main.py'],
-    pathex=[legacy_pyqt_dir, source_deps_dir],
+    pathex=[legacy_pyqt_dir, source_deps_dir] + ([private_ai_module.name] if private_ai_module else []),
     binaries=[
         *[
             (os.path.join(legacy_icu_dir, name), 'PyQt6/Qt6/bin')
@@ -169,6 +179,8 @@ for runtime_name in sorted(os.listdir(legacy_qt_ffmpeg_dir)):
         )
 
 pyz = PYZ(a.pure)
+if private_ai_module is not None:
+    private_ai_module.cleanup()
 
 exe = EXE(
     pyz,
