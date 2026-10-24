@@ -10,6 +10,7 @@
 - 捕获 Python 内存错误、Windows 错误 1455 和页面文件不足，显示明确的内存不足处理提示并停止任务。
 - `whisper` 和 `pandas` 改为按需导入，减少启动阶段的重型依赖加载。
 - PyInstaller 配置继续使用 Qt 6.7、Server 2016 兼容 ICU/VC++ 运行库，并将 `tb.ico`、`soft_pic` 和配置模板加入发布包。
+- Windows 任务栏使用独立完整版 AppUserModelID，并在无边框窗口创建后绑定大/小原生图标，避免仅修复界面 Logo 而任务栏仍显示默认图标。
 
 ## AI 配置
 
@@ -94,4 +95,4 @@ $env:PYTHONPATH = (Resolve-Path '.source-run-deps').Path
 python -m unittest discover -s tests -p 'test*.py'
 ```
 
-本地验证覆盖 115 项测试（发布依赖检查需要设置 PACKAGED_EXE_PATH，私人 Key 检查另需 PACKAGED_PRIVATE_AI_CONFIG；另有 2 项专属三农发布测试按环境跳过）。当前只在 Windows 11 构建和启动验证过，Windows Server 2016 仍需在目标机器做最终实机验证。
+本地验证覆盖 119 项测试（发布依赖检查需要设置 PACKAGED_EXE_PATH，私人 Key 检查另需 PACKAGED_PRIVATE_AI_CONFIG；另有 2 项专属三农发布测试按环境跳过）。当前只在 Windows 11 构建和启动验证过，Windows Server 2016 仍需在目标机器做最终实机验证。

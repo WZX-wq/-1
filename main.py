@@ -163,6 +163,7 @@ from runtime_errors import (
     is_memory_exhaustion,
     is_system_generation_error,
 )
+from windows_app_identity import apply_native_window_icon, set_process_app_id
 import logging
 
 # # 设置日志配置
@@ -352,9 +353,6 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         self.pic_time = None
         self.part_title_part_setting = None
         self.setupUi(self)
-        icon_path = runtime_asset_path("tb.ico")
-        if icon_path is not None:
-            self.setWindowIcon(QIcon(str(icon_path)))
         self.all_setting_dict = read_dict_from_txt('setting.txt')
         self.part_title_setting_win = None
         self.title_setting_win = None
@@ -363,6 +361,9 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         # 自动生成时，任务入库不应依赖“是否上传服务器”复选框。
         self._auto_generation_active = False
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        icon_path = runtime_asset_path("tb.ico")
+        if icon_path is not None:
+            self.setWindowIcon(QIcon(str(icon_path)))
 
         self.step_timings = {}
         self.video_start_time = 0
@@ -13531,10 +13532,13 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"⚠️  启动时清理临时文件失败: {e}")
 
+    set_process_app_id()
     app = QApplication(sys.argv)
     icon_path = runtime_asset_path("tb.ico")
     if icon_path is not None:
         app.setWindowIcon(QIcon(str(icon_path)))
     window = BatchAICutter()
     window.show()
+    if icon_path is not None:
+        apply_native_window_icon(int(window.winId()), icon_path)
     sys.exit(app.exec())
