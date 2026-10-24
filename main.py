@@ -13015,7 +13015,9 @@ def read_dict_from_txt(file_path):
 
         # 配音
         voice_set_dict = {
-            'api_type': 0,
+            # 百度 TTS is the portable default; Edge TTS is network-policy
+            # sensitive and may return HTTP 403 on target computers.
+            'api_type': 1,
             'role_0': 0,
             'pit_0': 0,
             'spd_0': 0,

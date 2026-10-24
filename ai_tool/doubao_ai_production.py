@@ -23,6 +23,43 @@ def OpenAI(**_kwargs):
     return _client()
 
 
+def _normalize_text_list(value):
+    """Normalize model JSON arrays before callers join or persist them.
+
+    Some compatible endpoints occasionally return an object such as
+    ``{"word": "三清山"}`` for an array element even though the prompt asks
+    for strings.  Keeping that object out of the rest of the pipeline avoids
+    ``sequence item ... expected str instance`` failures during label and
+    subtitle generation.
+    """
+    if value is None:
+        return []
+    if isinstance(value, (str, dict)):
+        value = [value]
+    if not isinstance(value, (list, tuple)):
+        value = [value]
+
+    normalized = []
+    for item in value:
+        if isinstance(item, str):
+            text = item.strip()
+        elif isinstance(item, dict):
+            text = ""
+            for key in ("word", "text", "content", "name", "description", "value"):
+                candidate = item.get(key)
+                if candidate is not None:
+                    text = str(candidate).strip()
+                    if text:
+                        break
+            if not text:
+                text = " ".join(str(part).strip() for part in item.values() if part is not None).strip()
+        else:
+            text = str(item).strip()
+        if text:
+            normalized.append(text)
+    return normalized
+
+
 def douBao_ai_sr_intro_content(title, text):
     client = OpenAI()
     lead_model_list = [
@@ -65,7 +102,7 @@ def douBao_ai_sr_intro_content(title, text):
         try:
             array = json.loads(f'[{array_str}]')
             print(array)
-            return array
+            return _normalize_text_list(array)
         except json.JSONDecodeError:
             print("提取的字符串不是有效的 JSON 格式。")
             return []
@@ -100,7 +137,7 @@ def douBao_ai_intro_content(title, text):
         try:
             array = json.loads(f'[{array_str}]')
             print(array)
-            return array
+            return _normalize_text_list(array)
         except json.JSONDecodeError:
             print("提取的字符串不是有效的 JSON 格式。")
             return []
@@ -136,7 +173,7 @@ def douBao_ai_dispose_intro_content(title, text):
         try:
             array = json.loads(f'[{array_str}]')
             print(array)
-            return array
+            return _normalize_text_list(array)
         except json.JSONDecodeError:
             print("提取的字符串不是有效的 JSON 格式。")
             return []
@@ -214,7 +251,7 @@ def douBao_ai_strategy_content(title, text):
         try:
             array = json.loads(f'[{array_str}]')
             print(array)
-            return array
+            return _normalize_text_list(array)
         except json.JSONDecodeError as e:
             print(f"提取的字符串不是有效的 JSON 格式: {e}")
             print(f"问题字符串: [{array_str[:200]}...]")
@@ -257,7 +294,7 @@ def douBao_ai_qa_content(title, text):
         try:
             array = json.loads(f'[{array_str}]')
             print(array)
-            return array
+            return _normalize_text_list(array)
         except json.JSONDecodeError:
             print("提取的字符串不是有效的 JSON 格式。")
             return []
@@ -292,7 +329,7 @@ def douBao_ai_life_strategy_content(title):
         try:
             array = json.loads(f'[{array_str}]')
             print(array)
-            return array
+            return _normalize_text_list(array)
         except json.JSONDecodeError:
             print("提取的字符串不是有效的 JSON 格式。")
             return []
@@ -329,7 +366,7 @@ def douBao_ai_title(title):
         try:
             array = json.loads(f'[{array_str}]')
             print(array)
-            return array
+            return _normalize_text_list(array)
         except json.JSONDecodeError:
             print("提取的字符串不是有效的 JSON 格式。")
             return []
@@ -364,7 +401,7 @@ def douBao_ai_topic(text):
         try:
             array = json.loads(f'[{array_str}]')
             print(array)
-            return array
+            return _normalize_text_list(array)
         except json.JSONDecodeError:
             print("提取的字符串不是有效的 JSON 格式。")
             return []
@@ -402,7 +439,7 @@ def douBao_ai_tag(title, text):
                          array.pop(array.index(text.split(' ')[0])) if text.split(' ')[0] in array else text.split(' ')[
                              0])
             print(array)
-            return array
+            return _normalize_text_list(array)
         except json.JSONDecodeError:
             print("提取的字符串不是有效的 JSON 格式。")
             return []
@@ -439,7 +476,7 @@ def douBao_ai_word_intro_content(title, text):
         try:
             array = json.loads(f'[{array_str}]')
             print(array)
-            return array
+            return _normalize_text_list(array)
         except json.JSONDecodeError:
             print("提取的字符串不是有效的 JSON 格式。")
             return []

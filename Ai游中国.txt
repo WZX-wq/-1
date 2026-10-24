@@ -45,7 +45,7 @@
         "position": 0
     },
     "voice_set": {
-        "api_type": 0,
+        "api_type": 1,
         "role_0": 4,
         "spd_0": 25,
         "vol_0": 10,

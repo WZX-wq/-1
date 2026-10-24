@@ -19,6 +19,18 @@ class FakeCompletions:
 
 
 class FullVersionAiConfigurationTests(unittest.TestCase):
+    def test_model_array_items_are_normalized_to_text(self):
+        module = importlib.import_module("ai_tool.doubao_ai_production")
+
+        self.assertEqual(
+            module._normalize_text_list([
+                "开场",
+                {"word": "三清山"},
+                {"text": "云海壮观"},
+            ]),
+            ["开场", "三清山", "云海壮观"],
+        )
+
     def test_legacy_function_names_use_configured_openai_compatible_endpoint(self):
         module = importlib.import_module("ai_tool.doubao_ai_production")
         completions = FakeCompletions()
