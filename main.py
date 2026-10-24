@@ -2340,6 +2340,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                 self.all_setting_dict['part_title_set'] = model_set_dict['part_title_set']
                 self.all_setting_dict['srt_set'] = model_set_dict['srt_set']
                 self.all_setting_dict['voice_set'] = model_set_dict['voice_set']
+                self.all_setting_dict = migrate_legacy_voice_setting(self.all_setting_dict, 'setting.txt')
                 self.all_setting_dict['part_title_part_0_set'] = model_set_dict['part_title_part_0_set']
                 self.all_setting_dict['part_title_part_1_set'] = model_set_dict['part_title_part_1_set']
                 self.all_setting_dict['part_title_part_2_set'] = model_set_dict['part_title_part_2_set']
@@ -3044,6 +3045,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                 self.all_setting_dict['part_title_set'] = model_set_dict['part_title_set']
                 self.all_setting_dict['srt_set'] = model_set_dict['srt_set']
                 self.all_setting_dict['voice_set'] = model_set_dict['voice_set']
+                self.all_setting_dict = migrate_legacy_voice_setting(self.all_setting_dict, 'setting.txt')
                 self.all_setting_dict['part_title_part_0_set'] = model_set_dict['part_title_part_0_set']
                 self.all_setting_dict['part_title_part_1_set'] = model_set_dict['part_title_part_1_set']
                 self.all_setting_dict['part_title_part_2_set'] = model_set_dict['part_title_part_2_set']
@@ -3869,6 +3871,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
             self.all_setting_dict['part_title_set'] = model_set_dict['part_title_set']
             self.all_setting_dict['srt_set'] = model_set_dict['srt_set']
             self.all_setting_dict['voice_set'] = model_set_dict['voice_set']
+            self.all_setting_dict = migrate_legacy_voice_setting(self.all_setting_dict, 'setting.txt')
             self.all_setting_dict['part_title_part_0_set'] = model_set_dict['part_title_part_0_set']
             self.all_setting_dict['part_title_part_1_set'] = model_set_dict['part_title_part_1_set']
             self.all_setting_dict['part_title_part_2_set'] = model_set_dict['part_title_part_2_set']
@@ -4537,6 +4540,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                 self.all_setting_dict['part_title_set'] = model_set_dict['part_title_set']
                 self.all_setting_dict['srt_set'] = model_set_dict['srt_set']
                 self.all_setting_dict['voice_set'] = model_set_dict['voice_set']
+                self.all_setting_dict = migrate_legacy_voice_setting(self.all_setting_dict, 'setting.txt')
                 self.all_setting_dict['part_title_part_0_set'] = model_set_dict['part_title_part_0_set']
                 self.all_setting_dict['part_title_part_1_set'] = model_set_dict['part_title_part_1_set']
                 self.all_setting_dict['part_title_part_2_set'] = model_set_dict['part_title_part_2_set']
@@ -5234,6 +5238,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
             self.all_setting_dict['part_title_set'] = model_set_dict['part_title_set']
             self.all_setting_dict['srt_set'] = model_set_dict['srt_set']
             self.all_setting_dict['voice_set'] = model_set_dict['voice_set']
+            self.all_setting_dict = migrate_legacy_voice_setting(self.all_setting_dict, 'setting.txt')
             self.all_setting_dict['part_title_part_0_set'] = model_set_dict['part_title_part_0_set']
             self.all_setting_dict['part_title_part_1_set'] = model_set_dict['part_title_part_1_set']
             self.all_setting_dict['part_title_part_2_set'] = model_set_dict['part_title_part_2_set']
@@ -6494,6 +6499,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
             self.all_setting_dict['part_title_set'] = model_set_dict['part_title_set']
             self.all_setting_dict['srt_set'] = model_set_dict['srt_set']
             self.all_setting_dict['voice_set'] = model_set_dict['voice_set']
+            self.all_setting_dict = migrate_legacy_voice_setting(self.all_setting_dict, 'setting.txt')
             self.all_setting_dict['part_title_part_0_set'] = model_set_dict['part_title_part_0_set']
             self.all_setting_dict['part_title_part_1_set'] = model_set_dict['part_title_part_1_set']
             self.all_setting_dict['part_title_part_2_set'] = model_set_dict['part_title_part_2_set']
@@ -6925,6 +6931,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
             self.all_setting_dict['part_title_set'] = model_set_dict['part_title_set']
             self.all_setting_dict['srt_set'] = model_set_dict['srt_set']
             self.all_setting_dict['voice_set'] = model_set_dict['voice_set']
+            self.all_setting_dict = migrate_legacy_voice_setting(self.all_setting_dict, 'setting.txt')
             self.all_setting_dict['part_title_part_0_set'] = model_set_dict['part_title_part_0_set']
             self.all_setting_dict['part_title_part_1_set'] = model_set_dict['part_title_part_1_set']
             self.all_setting_dict['part_title_part_2_set'] = model_set_dict['part_title_part_2_set']
@@ -7637,6 +7644,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                 self.all_setting_dict['part_title_set'] = model_set_dict['part_title_set']
                 self.all_setting_dict['srt_set'] = model_set_dict['srt_set']
                 self.all_setting_dict['voice_set'] = model_set_dict['voice_set']
+                self.all_setting_dict = migrate_legacy_voice_setting(self.all_setting_dict, 'setting.txt')
                 self.all_setting_dict['part_title_part_0_set'] = model_set_dict['part_title_part_0_set']
                 self.all_setting_dict['part_title_part_1_set'] = model_set_dict['part_title_part_1_set']
                 self.all_setting_dict['part_title_part_2_set'] = model_set_dict['part_title_part_2_set']
@@ -11562,6 +11570,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
             self.all_setting_dict['part_title_set'] = dictionary['part_title_set']
             self.all_setting_dict['srt_set'] = dictionary['srt_set']
             self.all_setting_dict['voice_set'] = dictionary['voice_set']
+            self.all_setting_dict = migrate_legacy_voice_setting(self.all_setting_dict, 'setting.txt')
             self.all_setting_dict['part_title_part_0_set'] = dictionary['part_title_part_0_set']
             self.all_setting_dict['part_title_part_1_set'] = dictionary['part_title_part_1_set']
             self.all_setting_dict['part_title_part_2_set'] = dictionary['part_title_part_2_set']
@@ -13086,7 +13095,7 @@ def read_dict_from_txt(file_path):
         with open(file_path, 'r', encoding='utf-8') as file:
             dictionary = json.load(file)
         print(f"字典已成功从文件读取: {file_path}")
-        return dictionary
+        return migrate_legacy_voice_setting(dictionary, file_path)
     except json.JSONDecodeError:
         print(f"文件内容不是有效的 JSON 格式: {file_path}")
         return {}
@@ -13096,13 +13105,11 @@ def read_dict_from_txt(file_path):
 
 
 def migrate_legacy_voice_setting(settings, file_path='setting.txt'):
-    """Move old Edge-TTS defaults to Baidu for portable releases.
+    """Move old Edge-TTS settings to Baidu whenever a setting is loaded.
 
-    Existing installations keep their writable ``setting.txt`` when a new
-    package is extracted.  Older files therefore continued selecting Edge
-    TTS even after the bundled default changed to Baidu.  Migrate only the
-    legacy ``api_type=0`` value at startup so the next generation uses the
-    verified Baidu endpoint.
+    Existing installations and saved templates can contain ``api_type=0``.
+    Every read must migrate that value because generation paths reload settings
+    after startup and otherwise re-enable the unavailable Edge endpoint.
     """
     voice = settings.get('voice_set') if isinstance(settings, dict) else None
     if not isinstance(voice, dict):

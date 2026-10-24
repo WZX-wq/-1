@@ -39,6 +39,17 @@ class FullVersionAiConfigurationTests(unittest.TestCase):
         self.assertEqual(migrated["voice_set"]["api_type"], 1)
         write_setting.assert_called_once_with("setting.txt", migrated)
 
+    def test_rereading_legacy_setting_migrates_it_before_generation(self):
+        import main
+        settings = {"voice_set": {"api_type": 0}}
+        with patch.object(main.os.path, "exists", return_value=True), \
+                patch("builtins.open", unittest.mock.mock_open(read_data='{"voice_set": {"api_type": 0}}')), \
+                patch.object(main, "write_dict_to_txt") as write_setting:
+            reread = main.read_dict_from_txt("setting.txt")
+
+        self.assertEqual(reread["voice_set"]["api_type"], 1)
+        write_setting.assert_called_once_with("setting.txt", reread)
+
     def test_legacy_function_names_use_configured_openai_compatible_endpoint(self):
         module = importlib.import_module("ai_tool.doubao_ai_production")
         completions = FakeCompletions()
