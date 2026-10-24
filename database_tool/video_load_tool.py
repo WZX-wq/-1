@@ -4,6 +4,7 @@ import json
 import random
 import shutil
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -36,26 +37,251 @@ QUERY_TIMEOUT = 30  # 单条 SQL 最长 30 秒
 # 首标签查询已经返回完整素材记录。后续次标签筛选直接复用这些候选，
 # 避免为同一小批素材反复建立远程 MySQL/SSL 连接。
 _material_candidate_cache = {}
+_material_index_loaded = False
+_material_index_lock = threading.RLock()
+_material_index_write_lock = threading.Lock()
+_material_index_sync_lock = threading.Lock()
+_material_index_sync_started = False
+_material_db_retry_after = 0.0
+_MATERIAL_INDEX_FIELDS = (
+    'id', 'tags', 'city', 'screen', 'duration', 'material_category',
+    'material_application', 'is_quality_issue', 'video_down_status',
+    'video_resolution_status',
+)
+
+
+def _material_index_path():
+    return Path(os.getcwd()) / 'material_index.json'
+
+
+def _material_index_record(video):
+    return {key: video.get(key) for key in _MATERIAL_INDEX_FIELDS if key in video}
+
+
+def _load_material_index():
+    global _material_index_loaded
+    with _material_index_lock:
+        if _material_index_loaded:
+            return
+        _material_index_loaded = True
+        try:
+            with _material_index_path().open('r', encoding='utf-8') as index_file:
+                records = json.load(index_file)
+            if not isinstance(records, list):
+                return
+            for video in records:
+                if isinstance(video, dict) and video.get('id') is not None:
+                    _material_candidate_cache.setdefault(str(video['id']), video)
+        except (OSError, ValueError, TypeError):
+            return
+
+
+def _save_material_index():
+    index_path = _material_index_path()
+    temporary_path = index_path.with_suffix('.json.tmp')
+    try:
+        with _material_index_write_lock:
+            with _material_index_lock:
+                records = list(_material_candidate_cache.values())
+            temporary_path.write_text(
+                json.dumps(records, ensure_ascii=False, default=str),
+                encoding='utf-8',
+            )
+            os.replace(temporary_path, index_path)
+    except OSError as error:
+        print(f'保存本地素材索引失败：{error}')
+        try:
+            temporary_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _cache_material_candidates(videos):
-    for video in videos or []:
-        video_id = video.get('id')
-        if video_id is not None:
-            _material_candidate_cache[str(video_id)] = video
+    _load_material_index()
+    changed = False
+    with _material_index_lock:
+        for video in videos or []:
+            video_id = video.get('id')
+            if video_id is not None:
+                _material_candidate_cache[str(video_id)] = _material_index_record(video)
+                changed = True
+    if changed:
+        _save_material_index()
+
+
+def _local_material_path(video_id):
+    cache_dir = Path(os.getcwd()) / 'cacheVideo'
+    for name in (f'{video_id}.mp4', f'{video_id}.MP4'):
+        path = cache_dir / name
+        if path.is_file():
+            return path
+    return None
+
+
+def _offline_material_candidates(keyword, screen, location, audio_length,
+                                 poor_time=3, cate=None, allowed_ids=None):
+    _load_material_index()
+    allowed = {str(value) for value in allowed_ids} if allowed_ids is not None else None
+    candidates = []
+    unknown_local = []
+    cache_dir = Path(os.getcwd()) / 'cacheVideo'
+    with _material_index_lock:
+        records = list(_material_candidate_cache.items())
+    indexed_ids = {video_id for video_id, _video in records}
+    for video_id, video in records:
+        if allowed is not None and video_id not in allowed:
+            continue
+        path = _local_material_path(video_id)
+        if path is None:
+            continue
+        tags = str(video.get('tags') or '')
+        if keyword and keyword not in tags:
+            continue
+        city = str(video.get('city') or '')
+        if location and location not in city:
+            continue
+        try:
+            if int(video.get('screen')) != int(screen):
+                continue
+            duration = float(video.get('duration'))
+            if not float(audio_length) - poor_time <= duration <= float(audio_length) + poor_time:
+                continue
+        except (TypeError, ValueError):
+            continue
+        if cate is not None and str(video.get('material_category')) != str(cate):
+            continue
+        candidates.append(video)
+    if not candidates and cache_dir.is_dir():
+        for path in cache_dir.iterdir():
+            if not path.is_file() or path.suffix.lower() != '.mp4' or not path.stem.isdigit():
+                continue
+            if path.stem in indexed_ids:
+                continue
+            if allowed is not None and path.stem not in allowed:
+                continue
+            unknown_local.append({
+                'id': int(path.stem),
+                'tags': '',
+                'city': '',
+                'screen': screen,
+                'duration': audio_length,
+                'material_category': cate,
+                'local_only': True,
+            })
+    if not candidates:
+        candidates = unknown_local
+        if candidates:
+            print('本地素材标签索引没有匹配项，以下素材按编号随机兜底，无法保证与文案标签一致')
+    random.shuffle(candidates)
+    return candidates[:20]
+
+
+def sync_local_material_index():
+    """Load database metadata for existing cacheVideo IDs without downloading videos."""
+    cache_dir = Path(os.getcwd()) / 'cacheVideo'
+    if not cache_dir.is_dir():
+        return 0
+    video_ids = sorted({
+        path.stem for path in cache_dir.iterdir()
+        if path.is_file() and path.suffix.lower() == '.mp4' and path.stem.isdigit()
+    }, key=int)
+    if not video_ids:
+        return 0
+
+    connection = None
+    cursor = None
+    found = 0
+    try:
+        connection = mysql.connector.connect(
+            host=host,
+            database=database,
+            user=user,
+            password=password,
+            port=port,
+            connection_timeout=15,
+            read_timeout=QUERY_TIMEOUT,
+            write_timeout=QUERY_TIMEOUT,
+        )
+        cursor = connection.cursor(dictionary=True)
+        columns = ', '.join(f'`{field}`' for field in _MATERIAL_INDEX_FIELDS)
+        for offset in range(0, len(video_ids), 400):
+            batch = video_ids[offset:offset + 400]
+            placeholders = ', '.join(['%s'] * len(batch))
+            cursor.execute(
+                f'SELECT {columns} FROM materials WHERE id IN ({placeholders})',
+                tuple(batch),
+            )
+            records = cursor.fetchall() or []
+            _cache_material_candidates(records)
+            found += len(records)
+        print(f'本地素材标签索引已更新：{found}/{len(video_ids)}')
+        return found
+    except Exception as error:
+        global _material_index_sync_started
+        _material_index_sync_started = False
+        print(f'更新本地素材标签索引失败：{error}')
+        return found
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if connection:
+            try:
+                connection.close()
+            except Exception:
+                pass
+
+
+def _start_local_material_index_sync():
+    global _material_index_sync_started
+    cache_dir = Path(os.getcwd()) / 'cacheVideo'
+    if not cache_dir.is_dir():
+        return
+    with _material_index_sync_lock:
+        if _material_index_sync_started:
+            return
+        _material_index_sync_started = True
+    threading.Thread(
+        target=sync_local_material_index,
+        name='local-material-index-sync',
+        daemon=True,
+    ).start()
+
+
+def _database_in_cooldown():
+    return time.time() < _material_db_retry_after
+
+
+def _mark_database_available():
+    global _material_db_retry_after
+    _material_db_retry_after = 0.0
+
+
+def _mark_database_unavailable():
+    global _material_db_retry_after
+    _material_db_retry_after = time.time() + 60
 
 
 def _filter_cached_materials(keyword, material_ids):
+    _load_material_index()
     if not keyword or not material_ids:
         return None
     cache_keys = [str(video_id) for video_id in material_ids]
     if not all(key in _material_candidate_cache for key in cache_keys):
         return None
-    return [
+    candidates = [
         _material_candidate_cache[key]
         for key in cache_keys
         if keyword in (_material_candidate_cache[key].get('tags') or '')
     ]
+    if _database_in_cooldown():
+        candidates = [
+            video for video in candidates
+            if _local_material_path(video.get('id')) is not None
+        ]
+    return candidates
 
 
 # 根据视频标签获取视频素材 id范围内
@@ -159,16 +385,35 @@ def get_videos_by_keyword(first_keyword, screen, location, location_id_list, aud
     if cached_videos is not None:
         return cached_videos
 
+    if _database_in_cooldown():
+        return _offline_material_candidates(
+            first_keyword, screen, location, audio_length, poorTime, cate,
+            allowed_ids=location_id_list,
+        )
     for attempt in range(1, 4):
         videos = _get_videos_by_keyword_once(
             first_keyword, screen, location, location_id_list, audio_length, poorTime, cate
         )
-        if videos is not None:
+        if videos:
+            _mark_database_available()
             return videos
+        if videos == []:
+            _mark_database_available()
+            break
+        _mark_database_unavailable()
+        offline = _offline_material_candidates(
+            first_keyword, screen, location, audio_length, poorTime, cate,
+            allowed_ids=location_id_list,
+        )
+        if offline:
+            return offline
         print(f"按标签筛选素材失败，准备重试（{attempt}/3）")
         if attempt < 3:
             time.sleep(1)
-    return []
+    return _offline_material_candidates(
+        first_keyword, screen, location, audio_length, poorTime, cate,
+        allowed_ids=location_id_list,
+    )
 
 
 def _get_videos_by_keyword_1_once(first_keyword, screen, location, audio_length, poorTime=3, cate=None):
@@ -284,17 +529,35 @@ def _get_videos_by_keyword_1_once(first_keyword, screen, location, audio_length,
 
 
 def get_videos_by_keyword_1(first_keyword, screen, location, audio_length, poorTime=3, cate=None):
+    if _database_in_cooldown():
+        return _offline_material_candidates(
+            first_keyword, screen, location, audio_length, poorTime, cate,
+        )
     for attempt in range(1, 4):
         videos = _get_videos_by_keyword_1_once(
             first_keyword, screen, location, audio_length, poorTime, cate
         )
-        if videos is not None:
+        if videos:
+            _mark_database_available()
             _cache_material_candidates(videos)
+            _start_local_material_index_sync()
             return videos
+        if videos == []:
+            _mark_database_available()
+            _start_local_material_index_sync()
+            break
+        _mark_database_unavailable()
+        offline = _offline_material_candidates(
+            first_keyword, screen, location, audio_length, poorTime, cate,
+        )
+        if offline:
+            return offline
         print(f"按首标签查询素材失败，准备重试（{attempt}/3）")
         if attempt < 3:
             time.sleep(1)
-    return []
+    return _offline_material_candidates(
+        first_keyword, screen, location, audio_length, poorTime, cate,
+    )
 
 
 # 根据cn视频标签获取视频素材 id范围内
@@ -1389,6 +1652,10 @@ def download_video(video_id, screen):
     # 保存视频文件
     file_path = os.path.join(cache_dir, f'{video_id}.mp4')
 
+    # 已存在且可读取的本地素材直接复用，断网时不再查询下载地址。
+    if get_video_resolution(file_path):
+        return file_path
+
     video_url = get_video_url(video_id)
     auth = ('xiaoling', 'XL#!_+Dj@!DYN7MzicAkXw') if video_url and '100.122.91.10' in video_url else None
     if not download_to_cache(video_url, file_path, f'素材 {video_id}', auth=auth):
@@ -1421,6 +1688,9 @@ def download_cn_video(video_id, screen):
 
     # 保存视频文件
     file_path = os.path.join(cache_dir, f'{video_id}.mp4')
+
+    if get_video_resolution(file_path):
+        return file_path
 
     video_url = get_video_url(video_id)
     auth = ('xiaoling', 'XL#!_+Dj@!DYN7MzicAkXw') if video_url and '100.122.91.10' in video_url else None
@@ -1464,6 +1734,9 @@ def download_afr_video(video_id):
 
     # 保存视频文件
     file_path = os.path.join(cache_dir, f'{video_id}.mp4')
+
+    if get_video_resolution(file_path):
+        return file_path
 
     video_url = get_video_url(video_id)
     if not video_url:

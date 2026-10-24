@@ -199,7 +199,7 @@ class MaterialDownloadTests(unittest.TestCase):
                 result = video_load_tool.download_video(789, 1)
 
             self.assertEqual(result, str(cached_file))
-            self.assertEqual(downloader.call_count, 2)
+            self.assertEqual(downloader.call_count, 1)
 
     def test_word_image_canvas_is_vertical_hd_and_source_is_preserved(self):
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as root:
@@ -220,6 +220,8 @@ class MaterialDownloadTests(unittest.TestCase):
 class MaterialCandidateFilterTests(unittest.TestCase):
     def tearDown(self):
         video_load_tool._material_candidate_cache.clear()
+        video_load_tool._material_index_loaded = False
+        video_load_tool._material_db_retry_after = 0
 
     def test_secondary_tag_filters_first_query_candidates_without_database(self):
         candidates = [
@@ -248,6 +250,61 @@ class MaterialCandidateFilterTests(unittest.TestCase):
 
         self.assertEqual([video['id'] for video in result], [3])
         database_query.assert_called_once()
+
+    def test_offline_query_uses_persisted_index_and_existing_local_video(self):
+        with tempfile.TemporaryDirectory() as root:
+            root_path = Path(root)
+            cache_dir = root_path / 'cacheVideo'
+            cache_dir.mkdir()
+            (cache_dir / '301.mp4').write_bytes(b'local-video')
+            (cache_dir / '302.mp4').write_bytes(b'local-video')
+            (root_path / 'material_index.json').write_text(
+                '[{"id":301,"tags":"三清山_云海","city":"上饶",'
+                '"screen":0,"duration":8,"material_category":"普通素材"},'
+                '{"id":302,"tags":"婺源_油菜花","city":"上饶",'
+                '"screen":0,"duration":8,"material_category":"普通素材"}]',
+                encoding='utf-8',
+            )
+            with patch.object(video_load_tool.os, 'getcwd', return_value=str(root_path)), \
+                    patch.object(video_load_tool, '_get_videos_by_keyword_1_once', return_value=None), \
+                    patch.object(video_load_tool.time, 'sleep'):
+                result = video_load_tool.get_videos_by_keyword_1(
+                    '云海', 0, '上饶', 8, 3, '普通素材'
+                )
+
+        self.assertEqual([video['id'] for video in result], [301])
+        self.assertFalse(result[0].get('local_only', False))
+
+    def test_unindexed_local_videos_are_an_explicit_offline_fallback(self):
+        with tempfile.TemporaryDirectory() as root:
+            root_path = Path(root)
+            cache_dir = root_path / 'cacheVideo'
+            cache_dir.mkdir()
+            (cache_dir / '401.mp4').write_bytes(b'local-video')
+            with patch.object(video_load_tool.os, 'getcwd', return_value=str(root_path)), \
+                    patch.object(video_load_tool, '_get_videos_by_keyword_1_once', return_value=None), \
+                    patch.object(video_load_tool.time, 'sleep'):
+                result = video_load_tool.get_videos_by_keyword_1(
+                    '没有索引的标签', 0, '', 8, 3, '普通素材'
+                )
+
+        self.assertEqual([video['id'] for video in result], [401])
+        self.assertTrue(result[0]['local_only'])
+
+    def test_valid_cached_video_does_not_require_database_download_url(self):
+        with tempfile.TemporaryDirectory() as root:
+            root_path = Path(root)
+            cache_dir = root_path / 'cacheVideo'
+            cache_dir.mkdir()
+            cached_video = cache_dir / '501.mp4'
+            cached_video.write_bytes(b'local-video')
+            with patch.object(video_load_tool.os, 'getcwd', return_value=str(root_path)), \
+                    patch.object(video_load_tool, 'get_video_resolution', return_value=(1080, 1920)), \
+                    patch.object(video_load_tool, 'get_video_url') as get_url:
+                result = video_load_tool.download_video(501, 0)
+
+        self.assertEqual(result, str(cached_video))
+        get_url.assert_not_called()
 
 
 class SanongGenerationTests(unittest.TestCase):
