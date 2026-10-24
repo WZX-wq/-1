@@ -41,3 +41,6 @@ class WorkerSignals(QObject):
 
     # 通用进度信号 (current, total, message)
     progress = pyqtSignal(int, int, str)
+
+    # 后台更新检查结果
+    updateResultReady = pyqtSignal(object)

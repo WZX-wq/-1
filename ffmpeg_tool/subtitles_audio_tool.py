@@ -130,15 +130,17 @@ async def generate_voice(one_text, output_path, increase_db=0, voice_name="zh-CN
         output_path: 最终保存的音频文件路径
         increase_db: 增加的音量分贝数，默认为 10
     """
-    temp_output_path = "temp_voice.mp3"
-    adjust_temp_output_path = "adjust_temp_voice.mp3"
-
-    # 删除临时文件（可选）
-    if os.path.exists(temp_output_path):
-        os.remove(temp_output_path)
-
-    if os.path.exists(adjust_temp_output_path):
-        os.remove(adjust_temp_output_path)
+    output_path = os.path.abspath(output_path)
+    output_dir = _get_temp_output_directory(output_path)
+    stem = os.path.splitext(os.path.basename(output_path))[0]
+    # 每个任务使用自己的临时文件，避免并发生成时互相覆盖。
+    temp_output_path = os.path.join(output_dir, f".{stem}.voice.mp3")
+    adjust_temp_output_path = os.path.join(output_dir, f".{stem}.adjusted.mp3")
+    for path in (temp_output_path, adjust_temp_output_path, output_path):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
 
     # zh-CN-YunxiNeural zh-CN-XiaoxiaoNeural
 
@@ -153,13 +155,13 @@ async def generate_voice(one_text, output_path, increase_db=0, voice_name="zh-CN
 
     one_text = one_text.replace("@", "艾特")
 
-    max_retries = 6  # 最大重试次数
+    max_retries = 3  # 最大重试次数；失败应尽快返回给上层任务
     retries = 0
+    last_error = None
     while retries < max_retries:
         try:
             voice = Communicate(text=one_text, voice=voice_name, rate=speed,  pitch="-10Hz")
-            # await voice.save(temp_output_path)
-            await asyncio.wait_for(voice.save(temp_output_path), timeout=30)
+            await asyncio.wait_for(voice.save(temp_output_path), timeout=15)
             # 获取原始音频时长
             duration_cmd = [
                 "ffprobe",
@@ -170,6 +172,8 @@ async def generate_voice(one_text, output_path, increase_db=0, voice_name="zh-CN
             ]
             duration_result = subprocess.run(duration_cmd, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
             original_duration = float(duration_result.stdout.strip()) if duration_result.returncode == 0 else 0
+            if original_duration <= 0:
+                raise RuntimeError("语音服务返回了空音频")
             
             # 跳过前0.1秒和后0.1秒的静音
             start_time = 0.1
@@ -188,27 +192,40 @@ async def generate_voice(one_text, output_path, increase_db=0, voice_name="zh-CN
             ]
             # subprocess.run(command, check=True)
             run_ffmpeg(command)
+            if not os.path.isfile(adjust_temp_output_path) or os.path.getsize(adjust_temp_output_path) == 0:
+                raise RuntimeError("语音处理未生成有效音频")
             break  # 如果成功生成语音，退出循环
         except Exception as e:
+            last_error = e
             print(f"Service Unavailable: {e}. Retrying ({retries + 1}/{max_retries})...")
             retries += 1
-            await asyncio.sleep(3)  # 等待1秒后重试
+            if retries < max_retries:
+                await asyncio.sleep(1)
 
     if retries == max_retries:
-        print('已结束尝试生成语言，未能生成')
-        return ''
+        for path in (temp_output_path, adjust_temp_output_path):
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+        raise RuntimeError(
+            f"语音生成失败（已重试 {max_retries} 次）：{last_error or '未知错误'}"
+        )
 
-    # 加载临时语音文件并调整音量
-    audio = AudioSegment.from_file(adjust_temp_output_path)
-    audio = audio + increase_db
-
-    # 保存最终的音频文件
-    audio.export(output_path, format="mp3")
-
-    # 删除临时文件（可选）
-    os.remove(temp_output_path)
-    os.remove(adjust_temp_output_path)
-    return output_path
+    try:
+        # 加载临时语音文件并调整音量
+        audio = AudioSegment.from_file(adjust_temp_output_path)
+        audio = audio + increase_db
+        audio.export(output_path, format="mp3")
+        if not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
+            raise RuntimeError("语音导出未生成有效音频")
+        return output_path
+    finally:
+        for path in (temp_output_path, adjust_temp_output_path):
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
 
 
 def merge_audios(audio_paths, output_path):
@@ -410,8 +427,13 @@ async def produce_audio_and_subtitles(timestamp, subtitles_text):
         full_voice_path = os.path.join(timestamp_folder_path, voice_path)
         await generate_voice(seg["text"], full_voice_path)
 
+        if not os.path.isfile(full_voice_path) or os.path.getsize(full_voice_path) == 0:
+            raise FileNotFoundError(f"配音文件未生成：{full_voice_path}")
+
         # 获取语音文件的实际长度
         audio_length = get_audio_length(full_voice_path)
+        if audio_length <= 0:
+            raise RuntimeError(f"配音文件无有效时长：{full_voice_path}")
 
         # 记录字幕
         end_time = start_time + audio_length
@@ -467,8 +489,13 @@ async def produce_audio_and_subtitles_to_path(api_type, video_tamp_path, subtitl
                 vol=audio_setting['volume_value']
             )
 
+        if not os.path.isfile(full_voice_path) or os.path.getsize(full_voice_path) == 0:
+            raise FileNotFoundError(f"配音文件未生成：{full_voice_path}")
+
         # 获取语音文件的实际长度
         audio_length = get_audio_length(full_voice_path)
+        if audio_length <= 0:
+            raise RuntimeError(f"配音文件无有效时长：{full_voice_path}")
 
         # 记录字幕
         end_time = start_time + audio_length
@@ -1084,9 +1111,12 @@ async def generate_title_voice(one_text, voice_name="zh-CN-YunxiNeural", speed="
             print(f"Service Unavailable: {e}. Retrying ({retries + 1}/{max_retries})...")
             retries += 1
     if retries == max_retries:
-        print('已结束尝试生成标题语言，未能生成')
-        return ''
+        raise RuntimeError(f"标题配音生成失败（已重试 {max_retries} 次）")
+    if not os.path.isfile(temp_title_output_path) or os.path.getsize(temp_title_output_path) == 0:
+        raise FileNotFoundError(f"标题配音文件未生成：{temp_title_output_path}")
     audio_time = get_audio_length(temp_title_output_path)
+    if audio_time <= 0:
+        raise RuntimeError(f"标题配音文件无有效时长：{temp_title_output_path}")
     # 删除临时文件（可选）
     os.remove(temp_title_output_path)
     return audio_time
@@ -1111,17 +1141,33 @@ def bd_generate_voice(text, out_path, role, spd, pit, vol):
         'Accept': '*/*'
     }
 
-    response = requests.request("POST", url, headers=headers, data=payload.encode("utf-8"))
+    try:
+        response = requests.request(
+            "POST", url, headers=headers, data=payload.encode("utf-8"), timeout=15
+        )
+    except requests.RequestException as error:
+        raise RuntimeError(f"百度配音服务连接失败：{error}") from error
 
-    # 检查响应是否成功
-    if response.status_code == 200:
-        # 将响应内容保存为 MP3 文件
-        with open(out_path, "wb") as f:
-            f.write(response.content)
-        print(f"音频文件已保存为{out_path}")
-    else:
-        print(f"请求失败，状态码：{response.status_code}")
-    print('生成语言')
+    if response.status_code != 200:
+        raise RuntimeError(f"百度配音服务返回 HTTP {response.status_code}")
+
+    content_type = str(response.headers.get("Content-Type", "")).lower()
+    if "audio" not in content_type:
+        try:
+            details = response.json()
+        except ValueError:
+            details = {}
+        message = details.get("err_msg") or details.get("error_description") or "接口未返回音频"
+        raise RuntimeError(f"百度配音失败：{message}")
+
+    if not response.content:
+        raise RuntimeError("百度配音返回空音频")
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "wb") as f:
+        f.write(response.content)
+    if not os.path.isfile(out_path) or os.path.getsize(out_path) == 0:
+        raise RuntimeError("百度配音文件未写入")
+    print(f"音频文件已保存为{out_path}")
 
 
 def get_access_token():
@@ -1131,7 +1177,15 @@ def get_access_token():
     """
     url = "https://aip.baidubce.com/oauth/2.0/token"
     params = {"grant_type": "client_credentials", "client_id": API_KEY, "client_secret": SECRET_KEY}
-    return str(requests.post(url, params=params).json().get("access_token"))
+    try:
+        response = requests.post(url, params=params, timeout=15)
+        response.raise_for_status()
+        token = response.json().get("access_token")
+    except (requests.RequestException, ValueError) as error:
+        raise RuntimeError(f"百度配音鉴权失败：{error}") from error
+    if not token:
+        raise RuntimeError("百度配音鉴权失败：未返回 access_token")
+    return str(token)
 
 
 # split_and_restore_speakers('白墙泡在油菜花里')

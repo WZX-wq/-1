@@ -67,6 +67,51 @@ class StartupImportTests(unittest.TestCase):
         self.assertIn("import whisper", source)
         self.assertIn("def get_copy_from_video", source)
 
+    def test_startup_update_check_uses_background_worker(self):
+        source = open("main.py", encoding="utf-8").read()
+        init_body = source[source.index("    def __init__(self):"):source.index("    def toggle_maximize")]
+        self.assertIn("self.auto_check_update()", init_body)
+        self.assertNotIn("check_for_updates()", init_body)
+        self.assertIn("UpdateCheckWorker", source)
+
+
+class AudioFailureTests(unittest.TestCase):
+    def test_failed_tts_does_not_return_an_empty_success_path(self):
+        from ffmpeg_tool import subtitles_audio_tool
+
+        with patch.object(subtitles_audio_tool, "Communicate", side_effect=RuntimeError("endpoint closed")), \
+                patch.object(subtitles_audio_tool.asyncio, "sleep"), \
+                patch.object(subtitles_audio_tool.os.path, "exists", return_value=False):
+            with self.assertRaisesRegex(RuntimeError, "语音生成失败"):
+                import asyncio
+                asyncio.run(subtitles_audio_tool.generate_voice("测试", "missing.mp3"))
+
+    def test_audio_pipeline_reports_missing_voice_before_ffprobe(self):
+        from ffmpeg_tool import subtitles_audio_tool
+        with patch.object(subtitles_audio_tool, "generate_voice", return_value=""), \
+                patch.object(subtitles_audio_tool, "get_audio_length") as get_length:
+            import asyncio
+            with self.assertRaisesRegex(FileNotFoundError, "配音文件未生成"):
+                asyncio.run(subtitles_audio_tool.produce_audio_and_subtitles_to_path(
+                    0, ".", "测试", 0,
+                    {"volume_value": 0, "audio_role": "voice", "speed_value": "+0%"},
+                ))
+            get_length.assert_not_called()
+
+    def test_baidu_tts_rejects_non_audio_response(self):
+        from ffmpeg_tool import subtitles_audio_tool
+
+        response = SimpleNamespace(
+            status_code=200,
+            headers={"Content-Type": "application/json"},
+            content=b'{"err_msg":"invalid token"}',
+            json=lambda: {"err_msg": "invalid token"},
+        )
+        with patch.object(subtitles_audio_tool, "get_access_token", return_value="token"), \
+                patch.object(subtitles_audio_tool.requests, "request", return_value=response):
+            with self.assertRaisesRegex(RuntimeError, "百度配音失败"):
+                subtitles_audio_tool.bd_generate_voice("测试", "missing.mp3", 1, 5, 0, 0)
+
 
 class AutoGenerationFailureStateTests(unittest.TestCase):
     def test_three_system_errors_stop_auto_generation(self):
@@ -109,11 +154,14 @@ class AutoGenerationFailureStateTests(unittest.TestCase):
             add_log=logs.append,
             loop=Loop(),
         )
-        with patch.object(main.QApplication, "processEvents"):
+        with patch.object(main.QApplication, "processEvents"), \
+                patch.object(main.QApplication, "instance", return_value=object()), \
+                patch.object(main.QMessageBox, "warning") as warning:
             main.BatchAICutter.on_error_occurred(window, MemoryError())
 
         self.assertTrue(window._stop_auto_generation)
         self.assertTrue(any("关闭其他程序" in message for message in logs))
+        warning.assert_called_once_with(window, '内存不足', main.MEMORY_EXHAUSTION_MESSAGE)
 
 
 if __name__ == "__main__":

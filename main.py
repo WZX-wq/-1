@@ -157,6 +157,7 @@ from worker.composite_video_worker import CompositeVideo
 from worker.composite_word_intro_video_worker import CompositeWordIntroVideo
 from worker.sa_worker import SaWorker, SaDHWorker
 from worker.test_audio_worker import TestAudioWorker
+from worker.update_worker import UpdateCheckWorker
 from sanong_generation.composer import SanongComposer, SanongComposeOptions
 from runtime_errors import (
     MEMORY_EXHAUSTION_MESSAGE,
@@ -927,10 +928,40 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         self.picWatermarkSpaceComboBox.addItems(['左上角', '右上角', '左下角', '右下角', '水平居中', '垂直居中'])
 
     def end_video_init(self):
-        if 'end_video' in self.all_setting_dict:
-            self.endVideoPathLabel.setText(self.all_setting_dict['end_video']['end_video_path'])
-        else:
-            self.endVideoPathLabel.setText('')
+        end_video_path = self._resolve_end_video_path()
+        self.endVideoPathLabel.setText(end_video_path or '')
+
+    def _resolve_end_video_path(self):
+        """Resolve a portable end-credit path when an old absolute path is stale."""
+        end_video = self.all_setting_dict.get('end_video') or {}
+        configured_path = str(end_video.get('end_video_path') or '').strip()
+        if configured_path and os.path.isfile(configured_path):
+            return configured_path
+
+        roots = []
+        if getattr(sys, 'frozen', False):
+            roots.append(Path(sys.executable).resolve().parent)
+        bundle_dir = getattr(sys, '_MEIPASS', '')
+        if bundle_dir:
+            roots.append(Path(bundle_dir))
+        roots.extend((Path.cwd(), Path(__file__).resolve().parent))
+
+        seen = set()
+        for root in roots:
+            end_dir = root / 'endCredits'
+            if not end_dir.is_dir():
+                continue
+            for candidate in sorted(end_dir.iterdir(), key=lambda item: item.name.lower()):
+                if candidate.suffix.lower() not in {'.mp4', '.avi', '.mkv', '.mov', '.wmv'}:
+                    continue
+                resolved = candidate.resolve()
+                if resolved in seen or not resolved.is_file():
+                    continue
+                seen.add(resolved)
+                end_video['end_video_path'] = str(resolved)
+                self.all_setting_dict['end_video'] = end_video
+                return str(resolved)
+        return None
 
     def add_log(self, text: str):
         """添加日志，最新信息显示在最上面"""
@@ -1335,10 +1366,10 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         no_button.setStyleSheet("QPushButton { color: red; }")
 
         # 显示确认框并获取用户响应
-        reply = confirmation_dialog.exec()
+        confirmation_dialog.exec()
 
-        # 2. 根据返回值决定是否继续
-        if reply != QMessageBox.DialogCode.Accepted:
+        # 自定义按钮的返回码不是 DialogCode，直接确认实际点击的按钮。
+        if confirmation_dialog.clickedButton() is not yes_button:
             return
 
         title_file_path = self.titleFileLabel.text()
@@ -1683,10 +1714,10 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         no_button.setStyleSheet("QPushButton { color: red; }")
 
         # 显示确认框并获取用户响应
-        reply = confirmation_dialog.exec()
+        confirmation_dialog.exec()
 
-        # 2. 根据返回值决定是否继续
-        if reply != QMessageBox.DialogCode.Accepted:
+        # 自定义按钮的返回码不是 DialogCode，直接确认实际点击的按钮。
+        if confirmation_dialog.clickedButton() is not yes_button:
             self.compositeVideoButton.setEnabled(True)
             return
 
@@ -2264,7 +2295,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
 
         self.all_setting_dict = read_dict_from_txt('setting.txt')
 
-        if not os.path.exists(self.all_setting_dict['end_video']['end_video_path']):
+        if not self._resolve_end_video_path():
             msg_box = QMessageBox()
             msg_box.setStyleSheet("""
                                     QMessageBox QLabel {
@@ -2968,7 +2999,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
 
         self.all_setting_dict = read_dict_from_txt('setting.txt')
 
-        if not os.path.exists(self.all_setting_dict['end_video']['end_video_path']):
+        if not self._resolve_end_video_path():
             msg_box = QMessageBox()
             msg_box.setStyleSheet("""
                              QMessageBox QLabel {
@@ -3845,7 +3876,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         else:
             self.all_setting_dict = read_dict_from_txt('setting.txt')
 
-        if not os.path.exists(self.all_setting_dict['end_video']['end_video_path']):
+        if not self._resolve_end_video_path():
             msg_box = QMessageBox()
             msg_box.setStyleSheet("""
                              QMessageBox QLabel {
@@ -4460,7 +4491,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
 
         self.all_setting_dict = read_dict_from_txt('setting.txt')
 
-        if not os.path.exists(self.all_setting_dict['end_video']['end_video_path']):
+        if not self._resolve_end_video_path():
             msg_box = QMessageBox()
             msg_box.setStyleSheet("""
                              QMessageBox QLabel {
@@ -5210,7 +5241,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         else:
             self.all_setting_dict = read_dict_from_txt('setting.txt')
 
-        if not os.path.exists(self.all_setting_dict['end_video']['end_video_path']):
+        if not self._resolve_end_video_path():
             msg_box = QMessageBox()
             msg_box.setStyleSheet("""
                                          QMessageBox QLabel {
@@ -5860,7 +5891,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         self.add_log('开始合成根据文案合成视频')
         QApplication.processEvents()
 
-        if not os.path.exists(self.all_setting_dict['end_video']['end_video_path']):
+        if not self._resolve_end_video_path():
             msg_box = QMessageBox()
             msg_box.setStyleSheet("""
                              QMessageBox QLabel {
@@ -6470,7 +6501,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         else:
             self.all_setting_dict = read_dict_from_txt('setting.txt')
 
-        if not os.path.exists(self.all_setting_dict['end_video']['end_video_path']):
+        if not self._resolve_end_video_path():
             msg_box = QMessageBox()
             msg_box.setStyleSheet("""
                              QMessageBox QLabel {
@@ -6901,7 +6932,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         else:
             self.all_setting_dict = read_dict_from_txt('setting.txt')
 
-        if not os.path.exists(self.all_setting_dict['end_video']['end_video_path']):
+        if not self._resolve_end_video_path():
             msg_box = QMessageBox()
             msg_box.setStyleSheet("""
                                  QMessageBox QLabel {
@@ -7560,7 +7591,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
 
         self.all_setting_dict = read_dict_from_txt('setting.txt')
 
-        if not os.path.exists(self.all_setting_dict['end_video']['end_video_path']):
+        if not self._resolve_end_video_path():
             msg_box = QMessageBox()
             msg_box.setStyleSheet("""
                                      QMessageBox QLabel {
@@ -11490,10 +11521,10 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                 no_button.setStyleSheet("QPushButton { color: red; }")
 
                 # 显示确认框并获取用户响应
-                reply = confirmation_dialog.exec()
+                confirmation_dialog.exec()
 
-                # 2. 根据返回值决定是否继续
-                if reply == QMessageBox.DialogCode.Accepted:
+                # 自定义按钮的返回码不是 DialogCode，直接确认实际点击的按钮。
+                if confirmation_dialog.clickedButton() is yes_button:
                     # 删除操作
                     for row_data in row_datas:
                         try:
@@ -11704,7 +11735,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         QApplication.processEvents()
 
     def auto_check_update(self):
-        """自动检查更新（静默）"""
+        """自动检查更新（静默，不阻塞窗口启动）。"""
         try:
             from update_system.update_config import UpdateConfig
             from update_system.update_checker import UpdateChecker
@@ -11718,16 +11749,29 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
 
                 # 检查是否应该检查更新
                 if checker.should_check_update():
-                    has_update, update_info = checker.check_for_updates()
-
-                    if has_update and update_info:
-                        # 发现更新，显示对话框
-                        from update_system.update_ui import UpdateDialog
-                        dialog = UpdateDialog(config, update_info, self)
-                        dialog.show()
+                    worker = UpdateCheckWorker(checker)
+                    self._update_check_worker = worker
+                    worker.signals.updateResultReady.connect(
+                        lambda result: self._handle_background_update_result(config, result)
+                    )
+                    worker.signals.errorOccurred.connect(
+                        lambda error: print(f"自动检查更新失败: {error}")
+                    )
+                    self.thread_pool.start(worker)
 
         except Exception as e:
             print(f"自动检查更新失败: {e}")
+
+    def _handle_background_update_result(self, config, result):
+        """Handle a completed update check on Qt's GUI thread."""
+        try:
+            has_update, update_info = result
+            if has_update and update_info:
+                from update_system.update_ui import UpdateDialog
+                self._update_dialog = UpdateDialog(config, update_info, self)
+                self._update_dialog.show()
+        except Exception as error:
+            print(f"处理更新检查结果失败: {error}")
 
     def check_for_updates_manual(self):
         """手动检查更新"""

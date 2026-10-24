@@ -68,7 +68,7 @@ class UpdateChecker:
         try:
             manifest_url = self.config.get_update_manifest_url()
             print(f"📡 正在从自定义服务器检查更新: {manifest_url}")
-            response = requests.get(manifest_url, timeout=30, verify=False)  # 增加超时旰到30秒
+            response = requests.get(manifest_url, timeout=5, verify=False)
             response.raise_for_status()
             
             manifest = response.json()
@@ -86,7 +86,7 @@ class UpdateChecker:
             response = requests.get(
                 self.config.GITHUB_API_URL,
                 headers={'Accept': 'application/vnd.github.v3+json'},
-                timeout=30,  # 增加超时旰到30秒
+                timeout=5,
                 verify=False  # 禁用SSL验证
             )
             response.raise_for_status()
