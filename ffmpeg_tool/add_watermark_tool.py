@@ -3,6 +3,37 @@ import os
 import subprocess
 import sys
 from PIL import Image, ImageOps
+from pathlib import Path
+
+
+def resolve_watermark_path(configured_path):
+    """Find the same watermark after moving a portable installation."""
+    configured_path = str(configured_path or '').strip()
+    if not configured_path:
+        return None
+    path = Path(configured_path)
+    if path.is_file():
+        return str(path.resolve())
+    roots = [Path.cwd(), Path(__file__).resolve().parent.parent]
+    if getattr(sys, 'frozen', False):
+        roots.insert(0, Path(sys.executable).resolve().parent)
+    if getattr(sys, '_MEIPASS', ''):
+        roots.append(Path(sys._MEIPASS))
+    for root in roots:
+        for folder in ('', 'watermarks', 'soft_pic'):
+            candidate = root / folder / path.name
+            if candidate.is_file():
+                return str(candidate.resolve())
+    return None
+
+
+def _decode_process_output(value):
+    """Decode optional subprocess output without masking the FFmpeg error."""
+    if value is None:
+        return ''
+    if isinstance(value, bytes):
+        return value.decode(sys.getdefaultencoding(), errors='replace')
+    return str(value)
 
 
 # 添加文字水印
@@ -22,9 +53,7 @@ def add_text_watermark(video_path, output_path, watermark_setting):
 
     # 检查字体文件是否存在
     if not os.path.exists(font_file):
-        print(f"错误: 字体文件不存在: {font_file}")
-        print("请确认路径是否正确，或尝试指定其他字体文件")
-        sys.exit(1)
+        raise FileNotFoundError(f"水印字体不存在，请重新选择字体：{font_file}")
 
     # 转义字体路径和文本内容
     escaped_font_file = escape_filter_arg(font_file)
@@ -71,8 +100,8 @@ def add_text_watermark(video_path, output_path, watermark_setting):
         )
 
         # 手动解码输出，使用系统默认编码
-        stdout = process.stdout.decode(sys.getdefaultencoding(), errors='replace')
-        stderr = process.stderr.decode(sys.getdefaultencoding(), errors='replace')
+        stdout = _decode_process_output(process.stdout)
+        stderr = _decode_process_output(process.stderr)
 
         print("标准输出:", stdout)
         print("错误输出:", stderr)
@@ -81,15 +110,19 @@ def add_text_watermark(video_path, output_path, watermark_setting):
     except subprocess.CalledProcessError as e:
         print(f"FFmpeg执行失败 (返回码: {e.returncode})")
         # 手动解码错误输出
-        stderr = e.stderr.decode(sys.getdefaultencoding(), errors='replace')
+        stderr = _decode_process_output(e.stderr)
         print("错误详情:", stderr)
-        sys.exit(1)
-    except FileNotFoundError:
-        print("错误: 找不到 ffmpeg 命令，请确保已安装 ffmpeg 并添加到系统路径")
+        raise RuntimeError(f"FFmpeg文字水印失败（返回码 {e.returncode}）：{stderr[-1000:]}") from e
+    except FileNotFoundError as e:
+        raise RuntimeError('未找到软件自带的FFmpeg，请完整解压软件目录') from e
 
 
 # 添加图片水印
 def add_pic_watermark(video_path, pic_path, output_path, watermark_setting):
+    resolved_pic = resolve_watermark_path(pic_path)
+    if not resolved_pic:
+        raise FileNotFoundError(f'水印图片不存在，请在设置中重新选择：{pic_path or "未设置"}')
+    pic_path = resolved_pic
     # 控制水印的位置、大小等参数
     x_offset = watermark_setting['watermark_location'][0]  # 水印距离视频左边缘的偏移量
     y_offset = watermark_setting['watermark_location'][1]  # 水印距离视频上边缘的偏移量
@@ -116,15 +149,21 @@ def add_pic_watermark(video_path, pic_path, output_path, watermark_setting):
     ]
     try:
         # 执行 FFmpeg 命令
-        subprocess.run(command, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        subprocess.run(
+            command,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
     except subprocess.CalledProcessError as e:
         print(f"FFmpeg执行失败 (返回码: {e.returncode})")
         # 手动解码错误输出
-        stderr = e.stderr.decode(sys.getdefaultencoding(), errors='replace')
+        stderr = _decode_process_output(e.stderr)
         print("错误详情:", stderr)
-        sys.exit(1)
-    except FileNotFoundError:
-        print("错误: 找不到 ffmpeg 命令，请确保已安装 ffmpeg 并添加到系统路径")
+        raise RuntimeError(f"FFmpeg图片水印失败（返回码 {e.returncode}）：{stderr[-1000:]}") from e
+    except FileNotFoundError as e:
+        raise RuntimeError('未找到软件自带的FFmpeg，请完整解压软件目录') from e
 
 
 # 手动转义滤镜参数中的特殊字符

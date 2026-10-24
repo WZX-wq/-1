@@ -1,5 +1,5 @@
 {
-    "version": "2.4.9",
+    "version": "2.4.12",
     "build_date": "2026-10-24",
-    "description": "完整版修复素材查询下载期间界面未响应"
+    "description": "完整版修复攻略数据格式和FFmpeg错误处理"
 }

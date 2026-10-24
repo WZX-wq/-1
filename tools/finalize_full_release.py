@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 from pathlib import Path
 
@@ -39,6 +40,25 @@ def finalize(release: Path, *, private: bool = False):
             raise RuntimeError(f'Missing bundled resource: {name}')
     for name in WORKSPACES:
         (release / name).mkdir(exist_ok=True)
+    # Fresh installations must not inherit absolute asset paths from the
+    # build computer. Retain custom watermarks when the file is available.
+    settings = json.loads((release / 'setting.txt').read_text(encoding='utf-8-sig'))
+    watermark = settings.get('water_set') or {}
+    configured = str(watermark.get('filePath') or '').strip()
+    source = Path(configured) if configured else None
+    if source and source.is_file():
+        folder = release / 'watermarks'
+        folder.mkdir(exist_ok=True)
+        shutil.copy2(source, folder / source.name)
+        watermark['filePath'] = 'watermarks/' + source.name
+    else:
+        watermark['filePath'] = ''
+    settings['water_set'] = watermark
+    endings = sorted((release / 'endCredits').glob('*.mp4'))
+    if endings:
+        settings.setdefault('end_video', {})['end_video_path'] = 'endCredits/' + endings[0].name
+    for settings_path in (release / 'setting.txt', internal / 'setting.txt'):
+        settings_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding='utf-8')
     if private:
         from PyInstaller.archive.readers import CArchiveReader
         archive = CArchiveReader(str(release / 'main.exe'))

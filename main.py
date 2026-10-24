@@ -121,6 +121,9 @@ from openpyxl.workbook import Workbook
 from ai_tool.ai_text_production import write_arrays_to_excel, title_keyword, \
     ai_analyse_title_special_tag, ai_analyse_title_usual_tag
 from ai_tool.runtime_config import ai_error_message, get_ai_config, save_ai_config
+from ai_tool.structured_content import (
+    normalize_json_records as _normalize_json_records, normalize_guide_pages, cached_guide_is_valid,
+)
 from database_tool.user_load_tool import add_user_task, get_account_by_name, update_image_user_by_id
 from database_tool.mysql_read_tool import fetch_with_retry
 from database_tool.material_download_tool import get_last_material_download_error
@@ -1725,6 +1728,8 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         self.add_log(str(result))
 
     def on_success_occurred(self, _result=None):
+        if isinstance(_result, str) and _result.startswith('跳过水印'):
+            self.add_log(_result)
         self.error_flag = False
         self.last_error_message = ''
         self._consecutive_system_failures = 0
@@ -2212,6 +2217,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
             if video_info_result[6] == 10:
                 if (video_info_result[2] is not None and video_info_result[3]
                         and video_info_result[2] != '' and video_info_result[3] != ''
+                        and cached_guide_is_valid(video_info_result[2], 'itinerary')
                         and not is_date_today(video_info_result[7]) and video_info_result[8]
                         < 3):
                     ai_title_word_list = video_info_result[2].split('&&')
@@ -2238,6 +2244,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
             if video_info_result[6] == 11:
                 if (video_info_result[2] is not None and video_info_result[3]
                         and video_info_result[2] != '' and video_info_result[3] != ''
+                        and cached_guide_is_valid(video_info_result[2], 'food')
                         and not is_date_today(video_info_result[7]) and video_info_result[8]
                         < 3):
                     ai_title_word_list = video_info_result[2].split('&&')
@@ -2262,6 +2269,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
             if video_info_result[6] == 12:
                 if (video_info_result[2] is not None and video_info_result[3]
                         and video_info_result[2] != '' and video_info_result[3] != ''
+                        and cached_guide_is_valid(video_info_result[2], 'customs')
                         and not is_date_today(video_info_result[7]) and video_info_result[8]
                         < 3):
                     ai_title_word_list = video_info_result[2].split('&&')
@@ -2893,7 +2901,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         logging.debug(f'添加水印失败')
                         continue
 
-                    self.add_log('后期处理,已添加水印。')
+                    self.add_log('后期处理,水印步骤完成。')
                     QApplication.processEvents()
 
                     # 视频压缩
@@ -3754,7 +3762,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         logging.debug(f'添加水印失败')
                         continue
 
-                    self.add_log('后期处理,已添加水印。')
+                    self.add_log('后期处理,水印步骤完成。')
                     QApplication.processEvents()
 
                     # 视频压缩
@@ -4413,7 +4421,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         logging.debug(f'添加水印失败')
                         continue
 
-                    self.add_log(f'后期处理,已添加水印。')
+                    self.add_log('后期处理,水印步骤完成。')
                     QApplication.processEvents()
 
                     # 视频压缩
@@ -5135,7 +5143,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         logging.debug(f'添加水印失败')
                         continue
 
-                    self.add_log('后期处理,已添加水印。')
+                    self.add_log('后期处理,水印步骤完成。')
                     QApplication.processEvents()
 
                     # 视频压缩
@@ -5833,7 +5841,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         logging.debug(f'添加水印失败')
                         continue
 
-                    self.add_log('后期处理,已添加水印。')
+                    self.add_log('后期处理,水印步骤完成。')
                     QApplication.processEvents()
 
                     # 视频压缩
@@ -6429,7 +6437,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                 logging.debug(f'添加水印失败')
                 continue
 
-            self.add_log('后期处理,已添加水印。')
+            self.add_log('后期处理,水印步骤完成。')
             QApplication.processEvents()
 
             # 视频压缩
@@ -7530,7 +7538,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         logging.debug(f'添加水印失败')
                         continue
 
-                    self.add_log('后期处理,已添加水印。')
+                    self.add_log('后期处理,水印步骤完成。')
                     QApplication.processEvents()
 
                     # 视频压缩
@@ -8296,7 +8304,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         logging.debug(f'添加水印失败')
                         continue
 
-                    self.add_log('后期处理,已添加水印。')
+                    self.add_log('后期处理,水印步骤完成。')
                     QApplication.processEvents()
 
                     # 视频压缩
@@ -8581,14 +8589,15 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
 
             # 解析JSON格式的行程数据
             day_data_list = []
-            for json_str in video_text:
-                try:
-                    day_data = json.loads(json_str)
-                    day_data_list.append(day_data)
-                except json.JSONDecodeError as e:
-                    self.add_log(f'解析行程数据失败: {e}')
+            for page_index, json_value in enumerate(video_text, start=1):
+                parsed_records = normalize_guide_pages(json_value, 'itinerary')
+                if not parsed_records:
+                    self.add_log(f'第{page_index}页行程数据格式无效，已跳过')
                     QApplication.processEvents()
                     continue
+                if len(parsed_records) > 1:
+                    self.add_log(f'第{page_index}页行程数据包含{len(parsed_records)}个页面，已展开')
+                day_data_list.extend(parsed_records)
 
             if not day_data_list:
                 self.add_log('没有有效的行程数据')
@@ -8655,13 +8664,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                             self.add_log(f'背景图生成失败')
                             QApplication.processEvents()
 
-                        # 删除下载的视频
-                        try:
-                            os.remove(video_path)
-                            self.add_log(f'已删除临时视频: {video_path}')
-                            QApplication.processEvents()
-                        except Exception as e:
-                            print(f'删除视频失败: {str(e)}')
+                        # Keep the source material for subsequent/offline jobs.
                     else:
                         self.add_log(f'视频下载失败')
                         QApplication.processEvents()
@@ -9542,7 +9545,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     copy_start_num += 1
                     continue
 
-                self.add_log('已添加水印')
+                self.add_log('水印步骤完成')
                 QApplication.processEvents()
 
                 # 视频压缩
@@ -10019,19 +10022,13 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
             if total_cols > 2:
                 # 从第3列（索引2）开始读取各页JSON数据
                 for col in range(2, total_cols):
-                    try:
-                        cell_value = df_copy.iloc[0, col]
-                        if isinstance(cell_value, str) and cell_value.strip():
-                            self.add_log(f'尝试解析第1行第{col}列: {cell_value[:80]}...')
-                            page_data = json.loads(cell_value)
-                            pages_data.append(page_data)
-                            self.add_log(f'第1行第{col}列解析成功')
-                    except json.JSONDecodeError as e:
-                        self.add_log(f'第1行第{col}列JSON解析失败: {str(e)[:100]}')
+                    cell_value = df_copy.iloc[0, col]
+                    parsed_records = normalize_guide_pages(cell_value, 'customs')
+                    if not parsed_records:
+                        self.add_log(f'第1行第{col}列内容不是有效对象，已跳过')
                         continue
-                    except Exception as e:
-                        self.add_log(f'第1行第{col}列处理出错: {str(e)[:100]}')
-                        continue
+                    pages_data.extend(parsed_records)
+                    self.add_log(f'第1行第{col}列解析成功（{len(parsed_records)}页）')
 
             if not pages_data:
                 self.add_log('没有有效的内容数据')
@@ -10162,7 +10159,13 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                 customs_list = []
                 for page in pages_data:
                     for page_key, customs_dict in page.items():
+                        if not isinstance(customs_dict, dict):
+                            self.add_log(f'页面"{page_key}"内容不是对象，已跳过')
+                            continue
                         for item_key, item_data in customs_dict.items():
+                            if not isinstance(item_data, dict):
+                                self.add_log(f'页面"{page_key}"的{item_key}内容不是对象，已跳过')
+                                continue
                             customs_list.append({
                                 'page_key': page_key,
                                 'item_data': item_data
@@ -10284,6 +10287,9 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                 if pages_data and len(pages_data) > 0:
                     first_page = pages_data[0]
                     for page_key, customs_dict in first_page.items():
+                        if not isinstance(customs_dict, dict):
+                            self.add_log(f'页面"{page_key}"内容不是对象，已跳过')
+                            continue
                         page_title = page_key.split('·')[1] if '·' in page_key else page_key
                         page_title = page_title.replace('|', '｜').replace('\\', '＼')
 
@@ -10294,7 +10300,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                                 item_data = customs_dict[item_key]
                                 break
 
-                        if item_data:
+                        if isinstance(item_data, dict) and item_data:
                             customs_name = item_data.get('风俗名称', '')
 
                             # 将4个字段分别做4页，每页突出一个方面
@@ -10603,7 +10609,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         self.add_log('添加水印失败')
                         QApplication.processEvents()
                     else:
-                        self.add_log('已添加水印')
+                        self.add_log('水印步骤完成')
                         # 重命名为最终路径
                         if os.path.exists(watermarked_output_path):
                             os.remove(final_output_path)
@@ -10780,14 +10786,15 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
 
             # 解析JSON格式的美食数据（新格式：每页包含2个美食）
             food_data_list = []
-            for json_str in video_text:
-                try:
-                    page_data = json.loads(json_str)
-                    food_data_list.append(page_data)
-                except json.JSONDecodeError as e:
-                    self.add_log(f'解析美食数据失败: {e}')
+            for page_index, json_value in enumerate(video_text, start=1):
+                parsed_records = normalize_guide_pages(json_value, 'food')
+                if not parsed_records:
+                    self.add_log(f'第{page_index}页美食数据格式无效，已跳过')
                     QApplication.processEvents()
                     continue
+                if len(parsed_records) > 1:
+                    self.add_log(f'第{page_index}页美食数据包含{len(parsed_records)}个页面，已展开')
+                food_data_list.extend(parsed_records)
 
             if not food_data_list:
                 self.add_log('没有有效的美食数据')
@@ -10848,12 +10855,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                             self.add_log(f'背景图生成失败')
                             QApplication.processEvents()
 
-                        try:
-                            os.remove(video_path)
-                            self.add_log(f'已删除临时视频: {video_path}')
-                            QApplication.processEvents()
-                        except Exception as e:
-                            print(f'删除视频失败: {str(e)}')
+                        # Keep the source material for subsequent/offline jobs.
                     else:
                         self.add_log(f'视频下载失败')
                         QApplication.processEvents()
@@ -10988,22 +10990,30 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
             # 收集所有需要显示的项目
             all_pages_items = []
             for page_idx, page_data in enumerate(food_data_list):
+                if not isinstance(page_data, dict):
+                    self.add_log(f'第{page_idx + 1}页美食数据不是对象，已跳过')
+                    QApplication.processEvents()
+                    continue
                 page_title = ""
                 for key in page_data.keys():
                     page_title = key
                     break
 
                 items_on_page = page_data.get(page_title, {})
+                if not isinstance(items_on_page, dict):
+                    self.add_log(f'第{page_idx + 1}页美食数据内容不是对象，已跳过')
+                    QApplication.processEvents()
+                    continue
                 item1 = items_on_page.get("项目1", {})
                 item2 = items_on_page.get("项目2", {})
 
-                if item1:
+                if isinstance(item1, dict) and item1:
                     all_pages_items.append({
                         'page_title': page_title,
                         'item': item1,
                         'original_page': page_idx
                     })
-                if item2:
+                if isinstance(item2, dict) and item2:
                     all_pages_items.append({
                         'page_title': page_title,
                         'item': item2,
@@ -11413,7 +11423,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     copy_start_num += 1
                     continue
 
-                self.add_log('已添加水印')
+                self.add_log('水印步骤完成')
                 QApplication.processEvents()
 
                 # 保存最终视频

@@ -79,6 +79,30 @@ class FullVersionAiConfigurationTests(unittest.TestCase):
         self.assertEqual(completions.kwargs["model"], "deepseek-flash")
 
 
+class StructuredContentRecoveryTests(unittest.TestCase):
+    def test_json_records_unwrap_nested_strings_and_lists(self):
+        import main
+
+        value = '[{"Day1": {"行程安排": "上午"}}, "{\\"Day2\\": {\\"行程安排\\": \\"下午\\"}}"]'
+        records = main._normalize_json_records(value)
+
+        self.assertEqual([list(record) for record in records], [["Day1"], ["Day2"]])
+
+    def test_json_records_ignore_invalid_scalar_values(self):
+        import main
+
+        self.assertEqual(main._normalize_json_records('invalid text'), [])
+        self.assertEqual(main._normalize_json_records(123), [])
+
+
+class WatermarkErrorReportingTests(unittest.TestCase):
+    def test_none_ffmpeg_stderr_is_safe_to_decode(self):
+        from ffmpeg_tool import add_watermark_tool
+
+        self.assertEqual(add_watermark_tool._decode_process_output(None), '')
+        self.assertEqual(add_watermark_tool._decode_process_output(b'error'), 'error')
+
+
 class StartupImportTests(unittest.TestCase):
     def test_auto_generation_pumps_ui_while_material_calls_run(self):
         import time

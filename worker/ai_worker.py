@@ -847,6 +847,11 @@ class AiDisposeIMGTitle(QRunnable):
                     return re.sub(r'(\d+)r(?=/|$|[^a-zA-Z])', r'\1¥', text)
 
                 for ai_word in ai_word_list:
+                    if not isinstance(ai_word, dict):
+                        self.signals.errorOccurred.emit(
+                            f'AI返回的数据格式错误：列表元素应为对象，实际为{type(ai_word).__name__}'
+                        )
+                        return
                     for key, value in ai_word.items():
                         if isinstance(value, dict):
                             for sub_key, sub_value in value.items():

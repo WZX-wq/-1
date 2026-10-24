@@ -10,6 +10,17 @@ import subprocess
 import platform
 import psutil
 from pathlib import Path
+from ffmpeg_tool.add_watermark_tool import resolve_watermark_path
+
+
+def _decode_process_output(value):
+    """Decode optional subprocess output without raising a secondary AttributeError."""
+    if value is None:
+        return ''
+    if isinstance(value, bytes):
+        return value.decode(sys.getdefaultencoding(), errors='replace')
+    return str(value)
+
 
 def get_system_info():
     """获取系统信息用于优化"""
@@ -99,8 +110,7 @@ def add_text_watermark_optimized(video_path, output_path, watermark_setting):
     
     # 检查字体文件
     if not os.path.exists(font_file):
-        print(f"错误: 字体文件不存在: {font_file}")
-        sys.exit(1)
+        raise FileNotFoundError(f"水印字体不存在，请重新选择字体：{font_file}")
     
     # 转义参数
     escaped_font_file = escape_filter_arg(font_file)
@@ -178,13 +188,17 @@ def add_text_watermark_optimized(video_path, output_path, watermark_setting):
         
     except subprocess.CalledProcessError as e:
         print(f"FFmpeg执行失败 (返回码: {e.returncode})")
-        stderr = e.stderr.decode(sys.getdefaultencoding(), errors='replace')
+        stderr = _decode_process_output(e.stderr)
         print("错误详情:", stderr)
-        sys.exit(1)
+        raise RuntimeError(f"FFmpeg文字水印失败（返回码 {e.returncode}）：{stderr[-1000:]}") from e
 
 def add_pic_watermark_optimized(video_path, pic_path, output_path, watermark_setting):
     """优化的图片水印添加"""
     print("🚀 使用优化版本添加图片水印...")
+    resolved_pic = resolve_watermark_path(pic_path)
+    if not resolved_pic:
+        raise FileNotFoundError(f'水印图片不存在，请重新选择：{pic_path or "未设置"}')
+    pic_path = resolved_pic
     
     # 获取优化参数
     encoding_params, system_info = get_optimal_encoding_params()
@@ -247,6 +261,8 @@ def add_pic_watermark_optimized(video_path, pic_path, output_path, watermark_set
         process = subprocess.run(
             command,
             check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             creationflags=subprocess.CREATE_NO_WINDOW if system_info['system'] == 'Windows' else 0
         )
         
@@ -258,9 +274,9 @@ def add_pic_watermark_optimized(video_path, pic_path, output_path, watermark_set
         
     except subprocess.CalledProcessError as e:
         print(f"FFmpeg执行失败 (返回码: {e.returncode})")
-        stderr = e.stderr.decode(sys.getdefaultencoding(), errors='replace')
+        stderr = _decode_process_output(e.stderr)
         print("错误详情:", stderr)
-        sys.exit(1)
+        raise RuntimeError(f"FFmpeg图片水印失败（返回码 {e.returncode}）：{stderr[-1000:]}") from e
 
 def escape_filter_arg(arg):
     """转义滤镜参数中的特殊字符"""

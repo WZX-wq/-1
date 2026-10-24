@@ -95,4 +95,12 @@ $env:PYTHONPATH = (Resolve-Path '.source-run-deps').Path
 python -m unittest discover -s tests -p 'test*.py'
 ```
 
-本地验证覆盖 119 项测试（发布依赖检查需要设置 PACKAGED_EXE_PATH，私人 Key 检查另需 PACKAGED_PRIVATE_AI_CONFIG；另有 2 项专属三农发布测试按环境跳过）。当前只在 Windows 11 构建和启动验证过，Windows Server 2016 仍需在目标机器做最终实机验证。
+发布依赖检查需要设置 PACKAGED_EXE_PATH，私人 Key 检查另需 PACKAGED_PRIVATE_AI_CONFIG；专属三农发布测试按环境跳过。当前只在 Windows 11 构建和启动验证过，Windows Server 2016 仍需在目标机器做最终实机验证。
+
+2.4.12 修复了攻略文案被普通文本归一化破坏的问题：图片行程、地方美食、节日风俗保持嵌套 JSON 对象，旧版损坏的缓存重新请求 AI。缺少可选水印时明确提示并保存视频，FFmpeg 失败保留真实错误；生成背景截图后保留原素材。新发布包中的片尾和水印使用相对路径。
+
+可用固定文案和本地背景、真实 FFmpeg 验证图片行程和美食攻略合成，无需数据库或在线 AI：
+
+```powershell
+python tools/verify_guide_render.py diagnostics/guide_render
+```

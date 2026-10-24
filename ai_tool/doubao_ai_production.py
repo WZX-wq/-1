@@ -4,6 +4,7 @@ import random
 import re
 
 from ai_tool.runtime_config import create_ai_client, get_ai_config
+from ai_tool.structured_content import normalize_guide_pages
 
 # Keep the historical constants and function names for compatibility with the
 # worker modules.  The client now targets the configured OpenAI-compatible
@@ -616,26 +617,7 @@ def douBao_ai_sights_strategy_content(title, text):
     )
     result = response.choices[0].message.content
 
-    try:
-        # 直接尝试解析完整结果（因为指令要求仅返回JSON）
-        array = json.loads(result)
-        print("解析成功：", array)
-        return _normalize_text_list(array)
-    except json.JSONDecodeError:
-        # 备用方案：提取数组部分再解析
-        pattern = r'\[(.*?)\]'
-        match = re.search(pattern, result, re.DOTALL)
-        if match:
-            try:
-                array = json.loads(match.group(0))  # 直接匹配完整数组
-                print("提取后解析成功：", array)
-                return _normalize_text_list(array)
-            except:
-                print("提取的字符串仍不是有效的JSON格式")
-                return []
-        else:
-            print("未找到匹配的数组")
-            return []
+    return normalize_guide_pages(result, 'itinerary')
 
 
 def douBao_ai_food_strategy_content(title, text):
@@ -759,24 +741,7 @@ def douBao_ai_food_strategy_content(title, text):
     )
     result = response.choices[0].message.content
 
-    try:
-        array = json.loads(result)
-        print("美食攻略解析成功：", array)
-        return _normalize_text_list(array)
-    except json.JSONDecodeError:
-        pattern = r'\[(.*?)\]'
-        match = re.search(pattern, result, re.DOTALL)
-        if match:
-            try:
-                array = json.loads(match.group(0))
-                print("提取后解析成功：", array)
-                return _normalize_text_list(array)
-            except:
-                print("提取的字符串仍不是有效的JSON格式")
-                return []
-        else:
-            print("未找到匹配的数组")
-            return []
+    return normalize_guide_pages(result, 'food')
 
 
 def douBao_ai_festival_customs_tag(title, content):
@@ -982,21 +947,4 @@ def douBao_ai_festival_customs_content(title, text):
     )
     result = response.choices[0].message.content
 
-    try:
-        array = json.loads(result)
-        print("节日风俗解析成功：", array)
-        return _normalize_text_list(array)
-    except json.JSONDecodeError:
-        pattern = r'\[(.*?)\]'
-        match = re.search(pattern, result, re.DOTALL)
-        if match:
-            try:
-                array = json.loads(match.group(0))
-                print("提取后解析成功：", array)
-                return _normalize_text_list(array)
-            except:
-                print("提取的字符串仍不是有效的JSON格式")
-                return []
-        else:
-            print("未找到匹配的数组")
-            return []
+    return normalize_guide_pages(result, 'customs')
