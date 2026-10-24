@@ -29,6 +29,7 @@ pic_infor_model2/
 *.mp3
 *.wav
 *.avi
+material_index.json
 
 # Bundled templates and default media used by the portable build
 !endCredits/
