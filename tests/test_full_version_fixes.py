@@ -80,6 +80,29 @@ class FullVersionAiConfigurationTests(unittest.TestCase):
 
 
 class StartupImportTests(unittest.TestCase):
+    def test_auto_generation_pumps_ui_while_material_calls_run(self):
+        import time
+        from PyQt6.QtCore import QThreadPool, QTimer
+        import main
+
+        app = main.QApplication.instance() or main.QApplication([])
+        window = SimpleNamespace(thread_pool=QThreadPool.globalInstance())
+        ticks = []
+        timer = QTimer()
+        timer.setInterval(5)
+        timer.timeout.connect(lambda: ticks.append(True))
+        timer.start()
+        main._active_generation_window = window
+        try:
+            call = main._UiPumpedCall(lambda: (time.sleep(0.1), "complete")[1])
+            result = call()
+        finally:
+            main._active_generation_window = None
+            timer.stop()
+
+        self.assertEqual(result, "complete")
+        self.assertGreater(len(ticks), 0)
+
     def test_heavy_optional_modules_are_not_top_level_imports(self):
         with open("main.py", encoding="utf-8") as source_file:
             tree = ast.parse(source_file.read())

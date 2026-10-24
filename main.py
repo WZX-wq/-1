@@ -110,7 +110,7 @@ try:
 except ImportError as error:
     _write_qt_load_diagnostics(error)
     raise
-from PyQt6.QtCore import QEventLoop, QThreadPool, Qt, QUrl, QRect, QPoint
+from PyQt6.QtCore import QEventLoop, QObject, QRunnable, QThread, QThreadPool, Qt, QUrl, QRect, QPoint, pyqtSignal
 from PyQt6.QtGui import QFont, QColor, QPixmap, QStandardItemModel, QStandardItem, QIcon
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
@@ -175,6 +175,63 @@ import logging
 #     filemode='a'
 # )
 MAX_LINES = 50
+_active_generation_window = None
+
+
+class _UiCallSignals(QObject):
+    completed = pyqtSignal(object)
+
+
+class _UiCallTask(QRunnable):
+    def __init__(self, function, args, kwargs):
+        super().__init__()
+        self.function = function
+        self.args = args
+        self.kwargs = kwargs
+        self.signals = _UiCallSignals()
+
+    def run(self):
+        try:
+            self.signals.completed.emit((True, self.function(*self.args, **self.kwargs)))
+        except Exception as error:
+            self.signals.completed.emit((False, error))
+
+
+class _UiPumpedCall:
+    """Run slow material I/O off the GUI thread while keeping Qt responsive."""
+    def __init__(self, function):
+        self.function = function
+        self.__name__ = getattr(function, '__name__', type(function).__name__)
+
+    def __call__(self, *args, **kwargs):
+        window = _active_generation_window
+        app = QApplication.instance()
+        if (window is None or app is None or QThread.currentThread() != app.thread()):
+            return self.function(*args, **kwargs)
+
+        result = {}
+        loop = QEventLoop()
+        task = _UiCallTask(self.function, args, kwargs)
+
+        def finish(payload):
+            result['payload'] = payload
+            loop.quit()
+
+        task.signals.completed.connect(finish)
+        window.thread_pool.start(task)
+        loop.exec()
+        succeeded, value = result['payload']
+        if not succeeded:
+            raise value
+        return value
+
+
+for _material_call_name in (
+    'get_videos_by_keyword_1', 'get_videos_by_keyword', 'download_video',
+    'download_cn_video', 'download_cover_video', 'download_word_pic',
+    'download_person_pic', 'get_random_cover_video', 'get_random_cover_video_by_cate',
+):
+    globals()[_material_call_name] = _UiPumpedCall(globals()[_material_call_name])
 
 
 def runtime_asset_path(relative_path):
@@ -1789,10 +1846,13 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
 
     # 自动生成视频
     def auto_generate(self):
+        global _active_generation_window
         self.autoGenerateButton.setEnabled(False)
         self._auto_generation_active = True
         self._stop_auto_generation = False
         self._consecutive_system_failures = 0
+        previous_generation_window = _active_generation_window
+        _active_generation_window = self
         try:
             self._auto_generate_impl()
         except Exception as error:
@@ -1802,6 +1862,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                 self.add_log(f'自动生成异常：{error}')
             QApplication.processEvents()
         finally:
+            _active_generation_window = previous_generation_window
             self._auto_generation_active = False
             self.autoGenerateButton.setEnabled(True)
 

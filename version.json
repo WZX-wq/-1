@@ -1,5 +1,5 @@
 {
-    "version": "2.4.8",
+    "version": "2.4.9",
     "build_date": "2026-10-24",
-    "description": "完整版彻底迁移旧版Edge配音配置并修复旧模板回退"
+    "description": "完整版修复素材查询下载期间界面未响应"
 }
