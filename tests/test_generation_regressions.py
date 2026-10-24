@@ -306,6 +306,21 @@ class MaterialCandidateFilterTests(unittest.TestCase):
         self.assertEqual(result, str(cached_video))
         get_url.assert_not_called()
 
+    def test_cached_video_in_any_local_material_pool_is_reused(self):
+        with tempfile.TemporaryDirectory() as root:
+            root_path = Path(root)
+            cache_dir = root_path / 'cacheAFRVideo'
+            cache_dir.mkdir()
+            cached_video = cache_dir / '502.mp4'
+            cached_video.write_bytes(b'local-video')
+            with patch.object(video_load_tool.os, 'getcwd', return_value=str(root_path)), \
+                    patch.object(video_load_tool, 'get_video_resolution', return_value=(1080, 1920)), \
+                    patch.object(video_load_tool, 'get_video_url') as get_url:
+                result = video_load_tool.download_video(502, 0)
+
+        self.assertEqual(result, str(cached_video))
+        get_url.assert_not_called()
+
 
 class SanongGenerationTests(unittest.TestCase):
     def test_material_worker_reports_empty_copywriting_instead_of_skipping(self):

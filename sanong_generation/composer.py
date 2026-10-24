@@ -111,21 +111,17 @@ class MediaBackend(Protocol):
 def build_audio_settings(settings: dict) -> dict:
     voice = settings["voice_set"]
     api_type = int(voice["api_type"])
+    # Edge's public websocket endpoint now frequently returns 403. Treat old
+    # api_type=0 account files as legacy configuration and use the configured
+    # Baidu voice instead of allowing generation to enter the dead endpoint.
     if api_type == 0:
-        speed = str(voice["spd_0"])
-        speed = speed if speed.startswith("-") else "+" + speed
-        return {
-            "api_type": 0,
-            "audio_role": EDGE_ROLES[int(voice["role_0"])],
-            "speed_value": speed + "%",
-            "volume_value": voice["vol_0"],
-        }
+        api_type = 1
     return {
-        "api_type": 1,
-        "audio_role": BAIDU_ROLES[int(voice["role_1"])],
-        "speed_value": voice["spd_1"],
-        "volume_value": voice["vol_1"],
-        "tone_value": voice["pit_1"],
+        "api_type": api_type,
+        "audio_role": BAIDU_ROLES[int(voice.get("role_1", 0))],
+        "speed_value": voice.get("spd_1", 5),
+        "volume_value": voice.get("vol_1", 5),
+        "tone_value": voice.get("pit_1", 5),
     }
 
 

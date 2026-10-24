@@ -48,6 +48,7 @@ _MATERIAL_INDEX_FIELDS = (
     'material_application', 'is_quality_issue', 'video_down_status',
     'video_resolution_status',
 )
+_LOCAL_MATERIAL_DIR_NAMES = ('cacheVideo', 'cacheCNVideo', 'cacheAFRVideo')
 
 
 def _material_index_path():
@@ -110,11 +111,13 @@ def _cache_material_candidates(videos):
 
 
 def _local_material_path(video_id):
-    cache_dir = Path(os.getcwd()) / 'cacheVideo'
-    for name in (f'{video_id}.mp4', f'{video_id}.MP4'):
-        path = cache_dir / name
-        if path.is_file():
-            return path
+    base_dir = Path(os.getcwd())
+    for directory_name in _LOCAL_MATERIAL_DIR_NAMES:
+        cache_dir = base_dir / directory_name
+        for name in (f'{video_id}.mp4', f'{video_id}.MP4'):
+            path = cache_dir / name
+            if path.is_file():
+                return path
     return None
 
 
@@ -123,8 +126,9 @@ def _offline_material_candidates(keyword, screen, location, audio_length,
     _load_material_index()
     allowed = {str(value) for value in allowed_ids} if allowed_ids is not None else None
     candidates = []
+    relaxed_candidates = []
     unknown_local = []
-    cache_dir = Path(os.getcwd()) / 'cacheVideo'
+    cache_dirs = [Path(os.getcwd()) / name for name in _LOCAL_MATERIAL_DIR_NAMES]
     with _material_index_lock:
         records = list(_material_candidate_cache.items())
     indexed_ids = {video_id for video_id, _video in records}
@@ -149,25 +153,32 @@ def _offline_material_candidates(keyword, screen, location, audio_length,
         except (TypeError, ValueError):
             continue
         if cate is not None and str(video.get('material_category')) != str(cate):
+            relaxed_candidates.append(video)
             continue
         candidates.append(video)
-    if not candidates and cache_dir.is_dir():
-        for path in cache_dir.iterdir():
-            if not path.is_file() or path.suffix.lower() != '.mp4' or not path.stem.isdigit():
+    if not candidates and relaxed_candidates:
+        candidates = relaxed_candidates
+        print(f'本地素材没有严格匹配类别“{cate}”，已按标签和画面参数继续匹配')
+    if not candidates:
+        for cache_dir in cache_dirs:
+            if not cache_dir.is_dir():
                 continue
-            if path.stem in indexed_ids:
-                continue
-            if allowed is not None and path.stem not in allowed:
-                continue
-            unknown_local.append({
-                'id': int(path.stem),
-                'tags': '',
-                'city': '',
-                'screen': screen,
-                'duration': audio_length,
-                'material_category': cate,
-                'local_only': True,
-            })
+            for path in cache_dir.iterdir():
+                if not path.is_file() or path.suffix.lower() != '.mp4' or not path.stem.isdigit():
+                    continue
+                if path.stem in indexed_ids:
+                    continue
+                if allowed is not None and path.stem not in allowed:
+                    continue
+                unknown_local.append({
+                    'id': int(path.stem),
+                    'tags': '',
+                    'city': '',
+                    'screen': screen,
+                    'duration': audio_length,
+                    'material_category': cate,
+                    'local_only': True,
+                })
     if not candidates:
         candidates = unknown_local
         if candidates:
@@ -178,11 +189,13 @@ def _offline_material_candidates(keyword, screen, location, audio_length,
 
 def sync_local_material_index():
     """Load database metadata for existing cacheVideo IDs without downloading videos."""
-    cache_dir = Path(os.getcwd()) / 'cacheVideo'
-    if not cache_dir.is_dir():
+    cache_dirs = [Path(os.getcwd()) / name for name in _LOCAL_MATERIAL_DIR_NAMES]
+    if not any(path.is_dir() for path in cache_dirs):
         return 0
     video_ids = sorted({
-        path.stem for path in cache_dir.iterdir()
+        path.stem
+        for cache_dir in cache_dirs if cache_dir.is_dir()
+        for path in cache_dir.iterdir()
         if path.is_file() and path.suffix.lower() == '.mp4' and path.stem.isdigit()
     }, key=int)
     if not video_ids:
@@ -236,8 +249,7 @@ def sync_local_material_index():
 
 def _start_local_material_index_sync():
     global _material_index_sync_started
-    cache_dir = Path(os.getcwd()) / 'cacheVideo'
-    if not cache_dir.is_dir():
+    if not any((Path(os.getcwd()) / name).is_dir() for name in _LOCAL_MATERIAL_DIR_NAMES):
         return
     with _material_index_sync_lock:
         if _material_index_sync_started:
@@ -1653,8 +1665,9 @@ def download_video(video_id, screen):
     file_path = os.path.join(cache_dir, f'{video_id}.mp4')
 
     # 已存在且可读取的本地素材直接复用，断网时不再查询下载地址。
-    if get_video_resolution(file_path):
-        return file_path
+    local_path = _local_material_path(video_id)
+    if local_path is not None and get_video_resolution(str(local_path)):
+        return str(local_path)
 
     video_url = get_video_url(video_id)
     auth = ('xiaoling', 'XL#!_+Dj@!DYN7MzicAkXw') if video_url and '100.122.91.10' in video_url else None

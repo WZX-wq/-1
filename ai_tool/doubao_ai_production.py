@@ -523,7 +523,7 @@ def douBao_ai_history_strategy_content(title, text):
             # if title_init not in title_array_str:
             #     array = [title] + array
             print(array)
-            return array
+            return _normalize_text_list(array)
         except json.JSONDecodeError:
             print("提取的字符串不是有效的 JSON 格式。")
             return []
@@ -620,7 +620,7 @@ def douBao_ai_sights_strategy_content(title, text):
         # 直接尝试解析完整结果（因为指令要求仅返回JSON）
         array = json.loads(result)
         print("解析成功：", array)
-        return array
+        return _normalize_text_list(array)
     except json.JSONDecodeError:
         # 备用方案：提取数组部分再解析
         pattern = r'\[(.*?)\]'
@@ -629,7 +629,7 @@ def douBao_ai_sights_strategy_content(title, text):
             try:
                 array = json.loads(match.group(0))  # 直接匹配完整数组
                 print("提取后解析成功：", array)
-                return array
+                return _normalize_text_list(array)
             except:
                 print("提取的字符串仍不是有效的JSON格式")
                 return []
@@ -762,7 +762,7 @@ def douBao_ai_food_strategy_content(title, text):
     try:
         array = json.loads(result)
         print("美食攻略解析成功：", array)
-        return array
+        return _normalize_text_list(array)
     except json.JSONDecodeError:
         pattern = r'\[(.*?)\]'
         match = re.search(pattern, result, re.DOTALL)
@@ -770,7 +770,7 @@ def douBao_ai_food_strategy_content(title, text):
             try:
                 array = json.loads(match.group(0))
                 print("提取后解析成功：", array)
-                return array
+                return _normalize_text_list(array)
             except:
                 print("提取的字符串仍不是有效的JSON格式")
                 return []
@@ -985,7 +985,7 @@ def douBao_ai_festival_customs_content(title, text):
     try:
         array = json.loads(result)
         print("节日风俗解析成功：", array)
-        return array
+        return _normalize_text_list(array)
     except json.JSONDecodeError:
         pattern = r'\[(.*?)\]'
         match = re.search(pattern, result, re.DOTALL)
@@ -993,7 +993,7 @@ def douBao_ai_festival_customs_content(title, text):
             try:
                 array = json.loads(match.group(0))
                 print("提取后解析成功：", array)
-                return array
+                return _normalize_text_list(array)
             except:
                 print("提取的字符串仍不是有效的JSON格式")
                 return []

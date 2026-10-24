@@ -174,7 +174,8 @@ import logging
 #     filename='app.log',
 #     filemode='a'
 # )
-MAX_LINES = 50
+# Keep a useful session history in the UI; progress updates are appended below.
+MAX_LINES = 5000
 _active_generation_window = None
 
 
@@ -1721,7 +1722,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         self.media_player.play()
 
     def on_process_result_ready(self, result):
-        self.run_label.setText(result)
+        self.add_log(str(result))
 
     def on_success_occurred(self, _result=None):
         self.error_flag = False

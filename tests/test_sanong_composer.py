@@ -78,15 +78,36 @@ class SanongMaterialSelectionTests(unittest.TestCase):
     def test_audio_settings_preserve_existing_voice_mapping(self):
         settings = {
             "voice_set": {
+                "api_type": 1,
+                "role_0": 1,
+                "spd_0": 5,
+                "vol_0": 90,
+                "role_1": 1,
+                "spd_1": 5,
+                "vol_1": 5,
+                "pit_1": 5,
+            }
+        }
+        audio = build_audio_settings(settings)
+        self.assertEqual(audio["api_type"], 1)
+        self.assertEqual(audio["audio_role"], 0)
+
+    def test_legacy_edge_setting_is_forced_to_baidu_for_generation(self):
+        settings = {
+            "voice_set": {
                 "api_type": 0,
                 "role_0": 1,
                 "spd_0": 5,
                 "vol_0": 90,
+                "role_1": 0,
+                "spd_1": 5,
+                "vol_1": 5,
+                "pit_1": 5,
             }
         }
         audio = build_audio_settings(settings)
-        self.assertEqual(audio["audio_role"], "zh-CN-XiaoxiaoNeural")
-        self.assertEqual(audio["speed_value"], "+5%")
+        self.assertEqual(audio["api_type"], 1)
+        self.assertEqual(audio["audio_role"], 1)
 
 
 class FakeMediaBackend:
