@@ -1,5 +1,5 @@
 {
-    "version": "2.4.12",
-    "build_date": "2026-10-24",
-    "description": "完整版修复攻略数据格式和FFmpeg错误处理"
+    "version": "2.4.13",
+    "build_date": "2026-10-26",
+    "description": "升级微软配音、随机音色选择并修复BGM重复中间文件"
 }

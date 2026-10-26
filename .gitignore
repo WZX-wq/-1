@@ -3,6 +3,8 @@ video_ai_config.json
 video_ai_model_state.json
 video_ai_embedded_config.py
 ftp_config.json
+doubao_tts_config.json
+voice_preferences.json
 account_polling_index.txt
 account_type_index*.txt
 *.key
@@ -18,6 +20,7 @@ cacheCoverVideo/
 cacheCutVideo/
 temp_title/
 tempConcateVideo/
+.video_work/
 syncVideo/
 notSuccess/
 person_images/

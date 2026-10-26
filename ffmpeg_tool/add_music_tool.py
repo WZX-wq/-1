@@ -1,36 +1,48 @@
+import os
 import subprocess
 
 
 def add_bgm_to_video(input_video_path, bgm_path, video_volume, music_volume, output_path):
-    """
-    为已生成的视频添加背景音乐（最后一步处理）
-
-    参数：
-        input_video_path: 已生成的视频路径（包含原配音）
-        bgm_path: 背景音乐路径
-        output_path: 输出路径
-    """
+    """Mix narration and BGM, rejecting failed FFmpeg output instead of keeping a silent stage."""
+    if os.path.abspath(input_video_path) == os.path.abspath(output_path):
+        raise ValueError("背景音乐输出路径不能与输入视频相同")
+    bg_audio_volume = int(music_volume) / 100
+    tts_volume = int(video_volume) / 100
+    command = [
+        "ffmpeg",
+        "-i", input_video_path,
+        "-i", bgm_path,
+        "-filter_complex",
+        f"[0:a]volume={tts_volume}[tts];"
+        f"[1:a]volume={bg_audio_volume},aloop=loop=-1:size=2147483647[bg];"
+        "[tts][bg]amix=inputs=2:duration=first:dropout_transition=0[outa]",
+        "-c:v", "copy",
+        "-map", "0:v",
+        "-map", "[outa]",
+        "-shortest",
+        "-y",
+        output_path,
+    ]
     try:
-        bg_audio_volume = int(music_volume)/100   # 转换为0到1之间的浮点数
-        tts_volume = int(video_volume)/100  # 转换为0到1之间的浮点数
-        # bg_audio_volume: float = 0.5  # 将背景音音量设置为原来的 50%
-        # tts_volume: float = 0.8       # 将原配音音量设置为原来的 80%
-        command = [
-            "ffmpeg",
-            "-i", input_video_path,
-            "-i", bgm_path,
-            "-filter_complex",
-            f"[0:a]volume={tts_volume}[tts];"  # 调整原配音音量
-            f"[1:a]volume={bg_audio_volume},aloop=loop=-1:size=2147483647[bg];"  # 循环播放背景音乐
-            "[tts][bg]amix=inputs=2:duration=first:dropout_transition=0[outa]",  # 混合音频并命名输出为outa
-            "-c:v", "copy",  # 视频流直接复制，不重新编码
-            "-map", "0:v",  # 映射视频流
-            "-map", "[outa]",  # 映射混合后的音频流
-            "-shortest",  # 使输出与视频长度一致
-            "-y",  # 覆盖已存在的输出文件
-            output_path
-        ]
-        # subprocess.run(command, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
-        subprocess.run(command, creationflags=subprocess.CREATE_NO_WINDOW)
-    except Exception as e:
-        print(e)
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        result = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            errors="replace",
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            check=False,
+        )
+    except OSError as error:
+        raise RuntimeError(f"无法启动 FFmpeg 添加背景音乐：{error}") from error
+    if result.returncode != 0:
+        try:
+            os.remove(output_path)
+        except FileNotFoundError:
+            pass
+        details = (result.stderr or result.stdout or "FFmpeg 未返回错误详情").strip()
+        raise RuntimeError(f"FFmpeg 添加背景音乐失败：{details[-1200:]}")
+    if not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
+        raise RuntimeError("FFmpeg 报告成功，但未生成有效的 BGM 视频文件")

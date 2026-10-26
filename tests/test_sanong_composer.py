@@ -92,7 +92,7 @@ class SanongMaterialSelectionTests(unittest.TestCase):
         self.assertEqual(audio["api_type"], 1)
         self.assertEqual(audio["audio_role"], 0)
 
-    def test_legacy_edge_setting_is_forced_to_baidu_for_generation(self):
+    def test_edge_voice_setting_is_preserved_for_generation(self):
         settings = {
             "voice_set": {
                 "api_type": 0,
@@ -106,8 +106,9 @@ class SanongMaterialSelectionTests(unittest.TestCase):
             }
         }
         audio = build_audio_settings(settings)
-        self.assertEqual(audio["api_type"], 1)
-        self.assertEqual(audio["audio_role"], 1)
+        self.assertEqual(audio["api_type"], 0)
+        self.assertEqual(audio["audio_role"], "zh-CN-XiaoxiaoNeural")
+        self.assertEqual(audio["speed_value"], "+5%")
 
 
 class FakeMediaBackend:

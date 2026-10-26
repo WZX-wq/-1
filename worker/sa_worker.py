@@ -1,7 +1,10 @@
 import asyncio
 import os
 
-from ffmpeg_tool.subtitles_audio_tool import AB_produce_audio_and_subtitles_to_path
+from ffmpeg_tool.subtitles_audio_tool import (
+    AB_produce_audio_and_subtitles_to_path,
+    choose_random_audio_voice,
+)
 from sanong_generation.media_core import generate_audio_subtitles
 from worker.worker_signals import WorkerSignals
 from PyQt6.QtCore import QRunnable
@@ -17,6 +20,10 @@ class SaWorker(QRunnable):
 
     def run(self):
         try:
+            self.audio_setting = choose_random_audio_voice(self.audio_setting)
+            self.signals.progressResultReady.emit(
+                f"本视频配音音色：{self.audio_setting.get('audio_role', '自动选择')}"
+            )
             # 获取当前时间戳
             # timestamp = int(time.time())
             tamp_folder_name = 'tempConcateVideo'
@@ -53,6 +60,10 @@ class SaDHWorker(QRunnable):
 
     def run(self):
         try:
+            self.audio_setting = choose_random_audio_voice(self.audio_setting)
+            self.signals.progressResultReady.emit(
+                f"本视频配音音色：{self.audio_setting.get('audio_role', '自动选择')}"
+            )
             # 获取当前时间戳
             # timestamp = int(time.time())
             tamp_folder_name = 'tempConcateVideo'

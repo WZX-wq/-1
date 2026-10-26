@@ -31,24 +31,26 @@ class FullVersionAiConfigurationTests(unittest.TestCase):
             ["开场", "三清山", "云海壮观"],
         )
 
-    def test_legacy_edge_voice_setting_migrates_to_baidu(self):
+    def test_edge_voice_choice_is_preserved_when_loading_a_template(self):
         import main
         settings = {"voice_set": {"api_type": 0}}
-        with patch.object(main, "write_dict_to_txt") as write_setting:
+        with patch.object(main, "load_voice_preferences", return_value={
+            "api_type": 0, "random_voice": True,
+        }):
             migrated = main.migrate_legacy_voice_setting(settings, "setting.txt")
-        self.assertEqual(migrated["voice_set"]["api_type"], 1)
-        write_setting.assert_called_once_with("setting.txt", migrated)
+        self.assertEqual(migrated["voice_set"]["api_type"], 0)
+        self.assertTrue(migrated["voice_set"]["random_voice"])
 
-    def test_rereading_legacy_setting_migrates_it_before_generation(self):
+    def test_rereading_setting_does_not_rewrite_or_force_another_provider(self):
         import main
-        settings = {"voice_set": {"api_type": 0}}
         with patch.object(main.os.path, "exists", return_value=True), \
                 patch("builtins.open", unittest.mock.mock_open(read_data='{"voice_set": {"api_type": 0}}')), \
+                patch.object(main, "load_voice_preferences", return_value={"api_type": 0}), \
                 patch.object(main, "write_dict_to_txt") as write_setting:
             reread = main.read_dict_from_txt("setting.txt")
 
-        self.assertEqual(reread["voice_set"]["api_type"], 1)
-        write_setting.assert_called_once_with("setting.txt", reread)
+        self.assertEqual(reread["voice_set"]["api_type"], 0)
+        write_setting.assert_not_called()
 
     def test_legacy_function_names_use_configured_openai_compatible_endpoint(self):
         module = importlib.import_module("ai_tool.doubao_ai_production")
@@ -151,6 +153,41 @@ class StartupImportTests(unittest.TestCase):
         self.assertIn("self.auto_check_update()", init_body)
         self.assertNotIn("check_for_updates()", init_body)
         self.assertIn("UpdateCheckWorker", source)
+
+
+class VoiceSettingsLayoutTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PyQt6.QtWidgets import QApplication
+        import main
+
+        cls.app = QApplication.instance() or QApplication([])
+        cls.main = main
+
+    def test_edge_refresh_button_does_not_cover_test_controls(self):
+        from PyQt6.QtWidgets import QWidget
+
+        window = self.main.BatchAICutter.__new__(self.main.BatchAICutter)
+        QWidget.__init__(window)
+        window.setupUi(window)
+        window._setup_tts_provider_ui()
+        try:
+            controls = (
+                window.refreshEdgeVoiceListButton,
+                window.label_82,
+                window.testAudioLineEdit,
+            )
+            self.assertEqual(window.refreshEdgeVoiceListButton.width(), 72)
+            for index, first in enumerate(controls):
+                for second in controls[index + 1:]:
+                    self.assertFalse(
+                        first.geometry().intersects(second.geometry()),
+                        f"{first.objectName()} overlaps {second.objectName()}",
+                    )
+        finally:
+            window.close()
+            window.deleteLater()
 
 
 class AudioFailureTests(unittest.TestCase):

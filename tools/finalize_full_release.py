@@ -11,7 +11,8 @@ ASSETS = (
     'tb.ico', 'soft_pic', 'endCredits', 'gifMaterial', 'strategy_pic',
     'video_model_set', 'cacheMusic', 'cacheMusic1', 'cacheMusic2', 'cacheMusic3',
     'img.jpg', 'blank.ass', 'blank.mp3', 'version.json', 'white.png', 'xq.png',
-    'video_ai_config.example.json', 'setting.txt',
+    'video_ai_config.example.json', 'voice_preferences.example.json',
+    'setting.txt',
 )
 WORKSPACES = (
     'cacheVideo', 'cacheAFRVideo', 'cacheCNVideo', 'cacheCoverVideo', 'cacheCutVideo',

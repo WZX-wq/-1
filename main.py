@@ -160,14 +160,22 @@ from worker.composite_video_worker import CompositeVideo
 from worker.composite_word_intro_video_worker import CompositeWordIntroVideo
 from worker.sa_worker import SaWorker, SaDHWorker
 from worker.test_audio_worker import TestAudioWorker
+from worker.voice_list_worker import EdgeVoiceListWorker
 from worker.update_worker import UpdateCheckWorker
 from sanong_generation.composer import SanongComposer, SanongComposeOptions
+from sanong_generation.composer import build_audio_settings
 from runtime_errors import (
     MEMORY_EXHAUSTION_MESSAGE,
     is_memory_exhaustion,
     is_system_generation_error,
 )
 from windows_app_identity import apply_native_window_icon, set_process_app_id
+from voice_config import (
+    load_voice_preferences,
+    normalize_tts_provider,
+    save_voice_preferences,
+)
+from video_work import cleanup_video_work, create_video_work_paths
 import logging
 
 # # 设置日志配置
@@ -180,6 +188,19 @@ import logging
 # Keep a useful session history in the UI; progress updates are appended below.
 MAX_LINES = 5000
 _active_generation_window = None
+
+
+def _create_video_stage_path(output_dir, intermediate_name):
+    """Create a hidden per-video staging path and its public final path."""
+    stage_path, final_path, work_dir = create_video_work_paths(output_dir, intermediate_name)
+    return stage_path, final_path, str(work_dir)
+
+
+def _final_video_path(stage_path, output_dir):
+    """Map any staged ``*_0..3.mp4`` path to one public final MP4."""
+    name = Path(stage_path).stem
+    name = re.sub(r'_(?:0|1|2|3|temp_compressed)$', '', name)
+    return str(Path(output_dir) / f'{name}.mp4')
 
 
 class _UiCallSignals(QObject):
@@ -415,6 +436,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         self.pic_time = None
         self.part_title_part_setting = None
         self.setupUi(self)
+        self._setup_tts_provider_ui()
         self.all_setting_dict = migrate_legacy_voice_setting(
             read_dict_from_txt('setting.txt'), 'setting.txt'
         )
@@ -699,12 +721,6 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         # 分段切换
         self.oneOfNumComboBox.currentIndexChanged.connect(self.on_currentIndexChanged)
 
-        # edge tts
-        self.edgeApiButton.clicked.connect(self.selectEdgeTTSApi)
-
-        # baidu
-        self.baiduApiButton.clicked.connect(self.selectBaiduApi)
-
         # 识别音频处理文案
         self.scriptVideoToolButton.clicked.connect(self.select_script_file_path)
         self.getScriptToolButton.clicked.connect(self.get_copy_from_video)
@@ -906,6 +922,109 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         else:
             self.accountLocationLineEdit.clear()
 
+    def _setup_tts_provider_ui(self):
+        """Configure the two supported TTS providers and voice controls."""
+        self.edgeApiButton.setGeometry(20, 20, 180, 31)
+        self.baiduApiButton.setGeometry(210, 20, 180, 31)
+        self.tabWidget_3.setGeometry(20, 70, 571, 200)
+        self.saveVioceSettButton.setGeometry(210, 276, 181, 35)
+
+        self.edgeApiButton.setText("微软 Edge TTS")
+        self.baiduApiButton.setText("百度 TTS")
+        self.edgeApiButton.setToolTip("微软在线语音；支持刷新官方音色目录")
+        self.baiduApiButton.setToolTip("百度语音合成")
+
+        self.audioRoleComboBox.setEditable(True)
+        self.audioRoleComboBox.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
+        self.audioRoleComboBox.setToolTip("可从官方列表选择，也可输入微软官方音色 ID")
+        self.refreshEdgeVoiceListButton = QtWidgets.QPushButton("刷新音色", self.b_tab_1)
+        self.refreshEdgeVoiceListButton.setObjectName("refreshEdgeVoiceListButton")
+        self.refreshEdgeVoiceListButton.setGeometry(294, 60, 72, 22)
+        self.refreshEdgeVoiceListButton.setFixedSize(72, 22)
+        self.refreshEdgeVoiceListButton.setToolTip("从微软官方获取最新音色列表")
+        self.refreshEdgeVoiceListButton.setStyleSheet(self.edgeApiButton.styleSheet())
+        # Keep the three controls on this row in separate, predictable slots.
+        # Older releases used a longer refresh label and could cover the test
+        # label and input when the button expanded to fit its text.
+        self.label_82.setGeometry(372, 60, 38, 21)
+        self.testAudioLineEdit.setGeometry(414, 60, 137, 21)
+
+        self.randomVoiceCheckBox = QtWidgets.QCheckBox("每条视频自动随机音色", self.widget_3)
+        self.randomVoiceCheckBox.setGeometry(20, 320, 190, 22)
+        self.randomVoiceCheckBox.setStyleSheet("color: white;")
+        self.randomVoiceCheckBox.setToolTip(
+            "启用后每条视频从当前服务商可用音色中随机选一个，单条视频保持同一音色；"
+            "关闭后使用手动选择的音色。"
+        )
+
+        self.edgeApiButton.clicked.connect(self.selectEdgeTTSApi)
+        self.baiduApiButton.clicked.connect(self.selectBaiduApi)
+        self.refreshEdgeVoiceListButton.clicked.connect(self.refresh_edge_voice_list)
+        self.tabWidget_3.setTabText(self.tabWidget_3.indexOf(self.b_tab_1), "微软")
+        self.tabWidget_3.setTabText(self.tabWidget_3.indexOf(self.b_tab_2), "百度")
+        self.tabWidget_3.currentChanged.connect(self.on_tts_tab_changed)
+
+    def on_tts_tab_changed(self, index):
+        self.freeApiRadioButton.setChecked(index == 0)
+        self.bdApiRadioButton.setChecked(index == 1)
+
+    def _selected_edge_voice(self):
+        current_text = str(self.audioRoleComboBox.currentText() or '').strip()
+        current_data = self.audioRoleComboBox.currentData()
+        if current_data and (not current_text or str(current_data) in current_text):
+            return str(current_data).strip()
+        if '—' in current_text:
+            current_text = current_text.rsplit('—', 1)[-1].strip()
+        return current_text or "zh-CN-YunxiNeural"
+
+    def refresh_edge_voice_list(self):
+        self.refreshEdgeVoiceListButton.setEnabled(False)
+        self.refreshEdgeVoiceListButton.setText("正在读取...")
+        self._edge_voice_worker = EdgeVoiceListWorker()
+        self._edge_voice_worker.signals.finished.connect(self._on_edge_voice_list_ready)
+        self._edge_voice_worker.signals.errorOccurred.connect(self._on_edge_voice_list_error)
+        self.thread_pool.start(self._edge_voice_worker)
+
+    def _on_edge_voice_list_ready(self, voices):
+        current = self._selected_edge_voice()
+        options = []
+        for voice in voices or []:
+            short_name = str(voice.get("ShortName") or "").strip()
+            if not short_name:
+                continue
+            friendly = str(voice.get("FriendlyName") or short_name)
+            locale = str(voice.get("Locale") or "")
+            options.append((f"{friendly} ({locale}) — {short_name}", short_name))
+        if not options:
+            self._on_edge_voice_list_error("微软音色目录没有返回可用音色。")
+            return
+        self.audioRoleComboBox.clear()
+        for label, short_name in options:
+            self.audioRoleComboBox.addItem(label, short_name)
+        index = self.audioRoleComboBox.findData(current)
+        if index >= 0:
+            self.audioRoleComboBox.setCurrentIndex(index)
+        else:
+            self.audioRoleComboBox.setEditText(current)
+        save_voice_preferences(
+            self.current_tts_provider(),
+            self.randomVoiceCheckBox.isChecked(),
+            [short_name for label, short_name in options if '(zh-' in label.lower()]
+            or [short_name for _label, short_name in options],
+        )
+        self.refreshEdgeVoiceListButton.setEnabled(True)
+        self.refreshEdgeVoiceListButton.setText("刷新音色")
+        self.add_log(f"已载入微软官方音色 {len(options)} 个")
+
+    def _on_edge_voice_list_error(self, message):
+        self.refreshEdgeVoiceListButton.setEnabled(True)
+        self.refreshEdgeVoiceListButton.setText("刷新音色")
+        QMessageBox.warning(self, "微软音色目录读取失败", str(message))
+
+    def current_tts_provider(self):
+        index = self.tabWidget_3.currentIndex()
+        return index if index in (0, 1) else 0
+
     # 初始化字幕设置
     def zm_setting_init(self):
 
@@ -964,18 +1083,28 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         self.volumeLabel_2.setText(f"{self.all_setting_dict['voice_set']['vol_1']}")
         self.toneLabel_2.setText(f"{self.all_setting_dict['voice_set']['pit_1']}")
 
-        if self.all_setting_dict['voice_set']['api_type'] == 0:
+        voice_set = self.all_setting_dict['voice_set']
+        self.randomVoiceCheckBox.setChecked(bool(voice_set.get('random_voice', True)))
+        provider = normalize_tts_provider(voice_set.get('api_type', 1), default=1)
+        voice_set['api_type'] = provider
+        self.tabWidget_3.setCurrentIndex(provider)
+        if provider == 0:
             self.freeApiRadioButton.setChecked(True)
-            self.audioRoleComboBox.setCurrentIndex(self.all_setting_dict['voice_set']['role_0'])
-            self.audioSpeedHorizontalSlider.setValue(self.all_setting_dict['voice_set']['spd_0'])
-            self.audioVolumeHorizontalSlider.setValue(self.all_setting_dict['voice_set']['vol_0'])
+            role_name = voice_set.get('role_0_name')
+            if role_name:
+                self.audioRoleComboBox.setEditText(str(role_name))
+            else:
+                self.audioRoleComboBox.setCurrentIndex(int(voice_set.get('role_0', 0)))
+            self.audioSpeedHorizontalSlider.setValue(int(voice_set.get('spd_0', 0)))
+            self.audioVolumeHorizontalSlider.setValue(int(voice_set.get('vol_0', 0)))
 
-        elif self.all_setting_dict['voice_set']['api_type'] == 1:
+        elif provider == 1:
             self.bdApiRadioButton.setChecked(True)
-            self.audioRoleComboBox_2.setCurrentIndex(self.all_setting_dict['voice_set']['role_1'])
-            self.audioSpeedHorizontalSlider_2.setValue(self.all_setting_dict['voice_set']['spd_1'])
-            self.audioVolumeHorizontalSlider_2.setValue(self.all_setting_dict['voice_set']['vol_1'])
-            self.audioToneHorizontalSlider_2.setValue(self.all_setting_dict['voice_set']['pit_1'])
+            self.audioRoleComboBox_2.setCurrentIndex(int(voice_set.get('role_1', 0)))
+            self.audioSpeedHorizontalSlider_2.setValue(int(voice_set.get('spd_1', 5)))
+            self.audioVolumeHorizontalSlider_2.setValue(int(voice_set.get('vol_1', 5)))
+            self.audioToneHorizontalSlider_2.setValue(int(voice_set.get('pit_1', 5)))
+
 
     # 初始化水印设置
     def water_setting_init(self):
@@ -1149,12 +1278,8 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         self.tabWidget_2.setCurrentIndex(0)
 
     def selectEdgeTTSApi(self):
-        self.baiduApiButton.setStyleSheet("""
-                                           QPushButton {
-                                              color: rgb(255, 255, 255);
-        	                                  background-color: rgb(22, 23, 25);
-                                           }
-                                           """)
+        for button in (self.edgeApiButton, self.baiduApiButton):
+            button.setStyleSheet("QPushButton { color: white; background-color: rgb(22,23,25); }")
         self.edgeApiButton.setStyleSheet("""
                            QPushButton {
                                background-color: rgb(19, 171, 234);
@@ -1162,14 +1287,11 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                            }
                            """)
         self.tabWidget_3.setCurrentIndex(0)
+        self.freeApiRadioButton.setChecked(True)
 
     def selectBaiduApi(self):
-        self.edgeApiButton.setStyleSheet("""
-                                                   QPushButton {
-                                                      color: rgb(255, 255, 255);
-                	                                  background-color: rgb(22, 23, 25);
-                                                   }
-                                                   """)
+        for button in (self.edgeApiButton, self.baiduApiButton):
+            button.setStyleSheet("QPushButton { color: white; background-color: rgb(22,23,25); }")
         self.baiduApiButton.setStyleSheet("""
                                    QPushButton {
                                        background-color: rgb(19, 171, 234);
@@ -1177,19 +1299,28 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                                    }
                                    """)
         self.tabWidget_3.setCurrentIndex(1)
+        self.bdApiRadioButton.setChecked(True)
 
-    def saveVideoSetting(self):
-        # 配音
-        voice_set_dict = {
-            'api_type': 0 if self.freeApiRadioButton.isChecked() else 1,
-            'role_0': self.audioRoleComboBox.currentIndex(),
+    def _voice_setting_for_save(self):
+        provider = self.current_tts_provider()
+        role_text = self._selected_edge_voice()
+        return {
+            'api_type': provider,
+            'role_0': max(0, self.audioRoleComboBox.currentIndex()),
+            'role_0_name': role_text,
             'spd_0': self.audioSpeedHorizontalSlider.value(),
             'vol_0': self.audioVolumeHorizontalSlider.value(),
             'role_1': self.audioRoleComboBox_2.currentIndex(),
             'pit_1': self.audioToneHorizontalSlider_2.value(),
             'spd_1': self.audioSpeedHorizontalSlider_2.value(),
-            'vol_1': self.audioVolumeHorizontalSlider_2.value()
+            'vol_1': self.audioVolumeHorizontalSlider_2.value(),
+            'random_voice': self.randomVoiceCheckBox.isChecked(),
         }
+
+    def saveVideoSetting(self):
+        # 配音
+        voice_set_dict = self._voice_setting_for_save()
+        provider = voice_set_dict['api_type']
 
         with open('setting.txt', 'r', encoding='utf-8') as file:
             dictionary = json.load(file)
@@ -1197,6 +1328,12 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         dictionary[f'voice_set'] = voice_set_dict
 
         write_dict_to_txt('setting.txt', dictionary)
+        self.all_setting_dict['voice_set'] = voice_set_dict
+        save_voice_preferences(
+            provider,
+            self.randomVoiceCheckBox.isChecked(),
+            load_voice_preferences().get('edge_voice_options', []),
+        )
 
         msg_box = QMessageBox()
         msg_box.setStyleSheet("""
@@ -1664,7 +1801,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
 
         # delete_file_if_exists("testoutput.mp3")
 
-        audio_role = self.audio_role_list[self.audioRoleComboBox.currentIndex()]
+        audio_role = self._selected_edge_voice()
 
         test_text = self.testAudioLineEdit.text()
 
@@ -1678,11 +1815,12 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         volume_value = self.audioVolumeHorizontalSlider.value()
 
         audio_setting = {
-            'api_type': 1,
+            'api_type': 0,
             'audio_role': audio_role,
             'test_text': test_text,
             'speed_value': speed_value,
-            'volume_value': volume_value
+            'volume_value': volume_value,
+            'random_voice': self.randomVoiceCheckBox.isChecked(),
         }
 
         playTest_worker = TestAudioWorker(audio_setting)
@@ -1705,19 +1843,18 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         test_text = self.testAudioLineEdit_2.text()
 
         audio_setting = {
-            'api_type': 2,
+            'api_type': 1,
             'test_text': test_text,
             'audio_role': audio_role_2,
             'speed_value': speed_value_2,
             'tone_value': tone_value_2,
-            'volume_value': volume_value_2
+            'volume_value': volume_value_2,
+            'random_voice': self.randomVoiceCheckBox.isChecked(),
         }
 
         playTest_worker = TestAudioWorker(audio_setting)
         playTest_worker.signals.testAudioResultReady.connect(self.playAudio)
         QThreadPool.globalInstance().start(playTest_worker)
-
-        # 播放音频
 
     def playAudio(self):
         audio_url = QUrl.fromLocalFile("testoutput.mp3")
@@ -2419,29 +2556,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                 self.all_setting_dict['part_title_part_5_set'] = model_set_dict['part_title_part_5_set']
 
             # tts 速度
-            speed_value = str(self.all_setting_dict['voice_set']['spd_0'])
-            if not str(speed_value).startswith('-'):
-                speed_value = '+' + speed_value
-            speed_value = speed_value + '%'
-
-            # 获取音频设置
-            audio_setting = {
-                'api_type': self.all_setting_dict['voice_set']['api_type'],
-                'audio_role': self.audio_role_list[self.all_setting_dict['voice_set']['role_0']],
-                'speed_value': speed_value,
-                'volume_value': self.all_setting_dict['voice_set']['vol_0']
-            }
-
-            if self.all_setting_dict['voice_set']['api_type'] == 1:
-                # 获取音频设置
-                audio_setting = {
-                    'api_type': self.all_setting_dict['voice_set']['api_type'],
-                    'audio_role': int(
-                        self.audio_bd_role_list[self.all_setting_dict['voice_set']['role_1']].split(':')[1]),
-                    'speed_value': self.all_setting_dict['voice_set']['spd_1'],
-                    'volume_value': self.all_setting_dict['voice_set']['vol_1'],
-                    'tone_value': self.all_setting_dict['voice_set']['pit_1']
-                }
+            audio_setting = build_audio_settings(self.all_setting_dict)
 
             # 获取视频文案
             video_title_text = get_row_data(copy_file, copy_start_num)
@@ -2792,7 +2907,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     # 输出路径
                     video_name = re.sub(r'[^\u4e00-\u9fffA-Za-z0-9]', '', video_title) + '_0.mp4'
 
-                    video_file_path = os.path.join(saveVideoPath, video_name)
+                    video_file_path, final_video_path, video_work_dir = _create_video_stage_path(saveVideoPath, video_name)
 
                     excel_file_path_name = '1.xls'
                     # 任务文件输出路径
@@ -2882,7 +2997,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         'zoom_size': self.all_setting_dict['water_set']['zoom'],
                         'pic_alpha': self.all_setting_dict['water_set']['alpha']
                     }
-                    final_output_path = output_bgm_video_path.replace('_1.mp4', '.mp4')
+                    final_output_path = _final_video_path(video_file_path, out_dir_path)
                     add_text_watermark_worker = AddWatermarkWorker(output_bgm_video_path, final_output_path,
                                                                    watermark_setting, 2,
                                                                    self.all_setting_dict['water_set']['filePath'])
@@ -2905,7 +3020,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     QApplication.processEvents()
 
                     # 视频压缩
-                    temp_compressed_path = final_output_path.replace('.mp4', '_temp_compressed.mp4')
+                    temp_compressed_path = os.path.join(video_work_dir, Path(final_output_path).stem + '_temp_compressed.mp4')
                     compress_video_worker = CompressVideoWorker(final_output_path, temp_compressed_path)
 
                     self.thread_pool.start(compress_video_worker)
@@ -2927,6 +3042,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     if os.path.exists(output_bgm_video_path):
                         os.remove(output_bgm_video_path)
 
+                    cleanup_video_work(video_work_dir)
                     data_dict = {
                         "标题": video_title.replace('|', ''),
                         "标签": video_tag,
@@ -3124,29 +3240,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                 self.all_setting_dict['part_title_part_5_set'] = model_set_dict['part_title_part_5_set']
 
             # tts 速度
-            speed_value = str(self.all_setting_dict['voice_set']['spd_0'])
-            if not str(speed_value).startswith('-'):
-                speed_value = '+' + speed_value
-            speed_value = speed_value + '%'
-
-            # 获取音频设置
-            audio_setting = {
-                'api_type': self.all_setting_dict['voice_set']['api_type'],
-                'audio_role': self.audio_role_list[self.all_setting_dict['voice_set']['role_0']],
-                'speed_value': speed_value,
-                'volume_value': self.all_setting_dict['voice_set']['vol_0']
-            }
-
-            if self.all_setting_dict['voice_set']['api_type'] == 1:
-                # 获取音频设置
-                audio_setting = {
-                    'api_type': self.all_setting_dict['voice_set']['api_type'],
-                    'audio_role': int(
-                        self.audio_bd_role_list[self.all_setting_dict['voice_set']['role_1']].split(':')[1]),
-                    'speed_value': self.all_setting_dict['voice_set']['spd_1'],
-                    'volume_value': self.all_setting_dict['voice_set']['vol_1'],
-                    'tone_value': self.all_setting_dict['voice_set']['pit_1']
-                }
+            audio_setting = build_audio_settings(self.all_setting_dict)
 
             # 获取视频文案
             video_title_text = get_row_data(copy_file, copy_start_num)
@@ -3638,7 +3732,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     # 输出路径
                     video_name = re.sub(r'[^\u4e00-\u9fffA-Za-z0-9]', '', video_title) + '_0.mp4'
 
-                    video_file_path = os.path.join(saveVideoPath, video_name)
+                    video_file_path, final_video_path, video_work_dir = _create_video_stage_path(saveVideoPath, video_name)
 
                     excel_file_path_name = '1.xls'
                     # 任务文件输出路径
@@ -3743,7 +3837,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         'zoom_size': self.all_setting_dict['water_set']['zoom'],
                         'pic_alpha': self.all_setting_dict['water_set']['alpha']
                     }
-                    final_output_path = output_bgm_video_path.replace('_2.mp4', '.mp4')
+                    final_output_path = _final_video_path(video_file_path, out_dir_path)
                     add_text_watermark_worker = AddWatermarkWorker(output_bgm_video_path, final_output_path,
                                                                    watermark_setting, 2,
                                                                    self.all_setting_dict['water_set']['filePath'])
@@ -3766,7 +3860,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     QApplication.processEvents()
 
                     # 视频压缩
-                    temp_compressed_path = final_output_path.replace('.mp4', '_temp_compressed.mp4')
+                    temp_compressed_path = os.path.join(video_work_dir, Path(final_output_path).stem + '_temp_compressed.mp4')
                     compress_video_worker = CompressVideoWorker(final_output_path, temp_compressed_path)
 
                     self.thread_pool.start(compress_video_worker)
@@ -3791,6 +3885,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     if os.path.exists(output_bgm_video_path):
                         os.remove(output_bgm_video_path)
 
+                    cleanup_video_work(video_work_dir)
                     data_dict = {
                         "标题": video_title.replace('|', ''),
                         "标签": video_tag,
@@ -3986,29 +4081,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
             return
 
         # tts 速度
-        speed_value = str(self.all_setting_dict['voice_set']['spd_0'])
-        if not str(speed_value).startswith('-'):
-            speed_value = '+' + speed_value
-        speed_value = speed_value + '%'
-
-        # 获取音频设置
-        audio_setting = {
-            'api_type': self.all_setting_dict['voice_set']['api_type'],
-            'audio_role': self.audio_role_list[self.all_setting_dict['voice_set']['role_0']],
-            'speed_value': speed_value,
-            'volume_value': self.all_setting_dict['voice_set']['vol_0']
-        }
-
-        if self.all_setting_dict['voice_set']['api_type'] == 1:
-            # 获取音频设置
-            audio_setting = {
-                'api_type': self.all_setting_dict['voice_set']['api_type'],
-                'audio_role': int(
-                    self.audio_bd_role_list[self.all_setting_dict['voice_set']['role_1']].split(':')[1]),
-                'speed_value': self.all_setting_dict['voice_set']['spd_1'],
-                'volume_value': self.all_setting_dict['voice_set']['vol_1'],
-                'tone_value': self.all_setting_dict['voice_set']['pit_1']
-            }
+        audio_setting = build_audio_settings(self.all_setting_dict)
 
         while True:
 
@@ -4312,7 +4385,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     # 输出路径
                     video_name = re.sub(r'[^\u4e00-\u9fffA-Za-z0-9]', '', video_title) + '_0.mp4'
 
-                    video_file_path = os.path.join(saveVideoPath, video_name)
+                    video_file_path, final_video_path, video_work_dir = _create_video_stage_path(saveVideoPath, video_name)
 
                     excel_file_path_name = '1.xls'
                     # 任务文件输出路径
@@ -4402,7 +4475,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         'zoom_size': self.all_setting_dict['water_set']['zoom'],
                         'pic_alpha': self.all_setting_dict['water_set']['alpha']
                     }
-                    final_output_path = output_bgm_video_path.replace('_1.mp4', '.mp4')
+                    final_output_path = _final_video_path(video_file_path, out_dir_path)
                     add_text_watermark_worker = AddWatermarkWorker(output_bgm_video_path, final_output_path,
                                                                    watermark_setting, 2,
                                                                    self.all_setting_dict['water_set']['filePath'])
@@ -4425,7 +4498,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     QApplication.processEvents()
 
                     # 视频压缩
-                    temp_compressed_path = final_output_path.replace('.mp4', '_temp_compressed.mp4')
+                    temp_compressed_path = os.path.join(video_work_dir, Path(final_output_path).stem + '_temp_compressed.mp4')
                     compress_video_worker = CompressVideoWorker(final_output_path, temp_compressed_path)
 
                     self.thread_pool.start(compress_video_worker)
@@ -4447,6 +4520,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     if os.path.exists(output_bgm_video_path):
                         os.remove(output_bgm_video_path)
 
+                    cleanup_video_work(video_work_dir)
                     data_dict = {
                         "标题": video_title.replace('|', ''),
                         "标签": video_tag,
@@ -4619,29 +4693,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                 self.all_setting_dict['part_title_part_5_set'] = model_set_dict['part_title_part_5_set']
 
             # tts 速度
-            speed_value = str(self.all_setting_dict['voice_set']['spd_0'])
-            if not str(speed_value).startswith('-'):
-                speed_value = '+' + speed_value
-            speed_value = speed_value + '%'
-
-            # 获取音频设置
-            audio_setting = {
-                'api_type': self.all_setting_dict['voice_set']['api_type'],
-                'audio_role': self.audio_role_list[self.all_setting_dict['voice_set']['role_0']],
-                'speed_value': speed_value,
-                'volume_value': self.all_setting_dict['voice_set']['vol_0']
-            }
-
-            if self.all_setting_dict['voice_set']['api_type'] == 1:
-                # 获取音频设置
-                audio_setting = {
-                    'api_type': self.all_setting_dict['voice_set']['api_type'],
-                    'audio_role': int(
-                        self.audio_bd_role_list[self.all_setting_dict['voice_set']['role_1']].split(':')[1]),
-                    'speed_value': self.all_setting_dict['voice_set']['spd_1'],
-                    'volume_value': self.all_setting_dict['voice_set']['vol_1'],
-                    'tone_value': self.all_setting_dict['voice_set']['pit_1']
-                }
+            audio_setting = build_audio_settings(self.all_setting_dict)
 
             # 获取视频文案
             video_title_text = get_row_data(copy_file, copy_start_num)
@@ -5029,7 +5081,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     # 输出路径
                     video_name = re.sub(r'[^\u4e00-\u9fffA-Za-z0-9]', '', video_title) + '_0.mp4'
 
-                    video_file_path = os.path.join(saveVideoPath, video_name)
+                    video_file_path, final_video_path, video_work_dir = _create_video_stage_path(saveVideoPath, video_name)
 
                     excel_file_path_name = '1.xls'
                     # 任务文件输出路径
@@ -5124,7 +5176,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         'zoom_size': self.all_setting_dict['water_set']['zoom'],
                         'pic_alpha': self.all_setting_dict['water_set']['alpha']
                     }
-                    final_output_path = output_bgm_video_path.replace('_1.mp4', '.mp4')
+                    final_output_path = _final_video_path(video_file_path, out_dir_path)
                     add_text_watermark_worker = AddWatermarkWorker(output_bgm_video_path, final_output_path,
                                                                    watermark_setting, 2,
                                                                    self.all_setting_dict['water_set']['filePath'])
@@ -5147,7 +5199,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     QApplication.processEvents()
 
                     # 视频压缩
-                    temp_compressed_path = final_output_path.replace('.mp4', '_temp_compressed.mp4')
+                    temp_compressed_path = os.path.join(video_work_dir, Path(final_output_path).stem + '_temp_compressed.mp4')
                     compress_video_worker = CompressVideoWorker(final_output_path, temp_compressed_path)
 
                     self.thread_pool.start(compress_video_worker)
@@ -5169,6 +5221,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     if os.path.exists(output_bgm_video_path):
                         os.remove(output_bgm_video_path)
 
+                    cleanup_video_work(video_work_dir)
                     data_dict = {
                         "标题": video_title.replace('|', ''),
                         "标签": video_tag,
@@ -5353,29 +5406,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
             return
 
         # tts 速度
-        speed_value = str(self.all_setting_dict['voice_set']['spd_0'])
-        if not str(speed_value).startswith('-'):
-            speed_value = '+' + speed_value
-        speed_value = speed_value + '%'
-
-        # 获取音频设置
-        audio_setting = {
-            'api_type': self.all_setting_dict['voice_set']['api_type'],
-            'audio_role': self.audio_role_list[self.all_setting_dict['voice_set']['role_0']],
-            'speed_value': speed_value,
-            'volume_value': self.all_setting_dict['voice_set']['vol_0']
-        }
-
-        if self.all_setting_dict['voice_set']['api_type'] == 1:
-            # 获取音频设置
-            audio_setting = {
-                'api_type': self.all_setting_dict['voice_set']['api_type'],
-                'audio_role': int(
-                    self.audio_bd_role_list[self.all_setting_dict['voice_set']['role_1']].split(':')[1]),
-                'speed_value': self.all_setting_dict['voice_set']['spd_1'],
-                'volume_value': self.all_setting_dict['voice_set']['vol_1'],
-                'tone_value': self.all_setting_dict['voice_set']['pit_1']
-            }
+        audio_setting = build_audio_settings(self.all_setting_dict)
 
         while True:
 
@@ -5686,7 +5717,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     # 输出路径
                     video_name = re.sub(r'[^\u4e00-\u9fffA-Za-z0-9]', '', video_title) + '_0.mp4'
 
-                    video_file_path = os.path.join(saveVideoPath, video_name)
+                    video_file_path, final_video_path, video_work_dir = _create_video_stage_path(saveVideoPath, video_name)
 
                     excel_file_path_name = '1.xls'
                     # 任务文件输出路径
@@ -5845,7 +5876,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     QApplication.processEvents()
 
                     # 视频压缩
-                    temp_compressed_path = watermark_output_path.replace('_3.mp4', '_temp_compressed.mp4')
+                    temp_compressed_path = os.path.join(video_work_dir, Path(watermark_output_path).stem + '_temp_compressed.mp4')
                     compress_video_worker = CompressVideoWorker(watermark_output_path, temp_compressed_path)
 
                     self.thread_pool.start(compress_video_worker)
@@ -5861,7 +5892,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         QApplication.processEvents()
 
                     # 添加图片封面
-                    final_output_path = watermark_output_path.replace('_3.mp4', '.mp4')
+                    final_output_path = _final_video_path(video_file_path, out_dir_path)
                     # 添加视频封面工作流
                     addPicWorker = AddPicWorker(watermark_output_path, pic_title_video, 'white.png', pic_title_ass,
                                                 final_output_path)
@@ -5886,6 +5917,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     if os.path.exists(temp_compressed_path):
                         os.remove(temp_compressed_path)
 
+                    cleanup_video_work(video_work_dir)
                     data_dict = {
                         "标题": video_title.replace('|', ''),
                         "标签": video_tag,
@@ -6296,7 +6328,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
 
             saveVideoPath = out_dir_path
 
-            video_file_path = os.path.join(saveVideoPath, video_name)
+            video_file_path, final_video_path, video_work_dir = _create_video_stage_path(saveVideoPath, video_name)
 
             excel_file_path_name = '1.xls'
             # 任务文件输出路径
@@ -6419,7 +6451,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                 'zoom_size': self.all_setting_dict['water_set']['zoom'],
                 'pic_alpha': self.all_setting_dict['water_set']['alpha']
             }
-            final_output_path = output_bgm_video_path.replace('_1.mp4', '.mp4')
+            final_output_path = _final_video_path(video_file_path, out_dir_path)
             add_text_watermark_worker = AddWatermarkWorker(output_bgm_video_path, final_output_path,
                                                            watermark_setting, 2,
                                                            self.all_setting_dict['water_set']['filePath'])
@@ -6441,7 +6473,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
             QApplication.processEvents()
 
             # 视频压缩
-            temp_compressed_path = final_output_path.replace('.mp4', '_temp_compressed.mp4')
+            temp_compressed_path = os.path.join(video_work_dir, Path(final_output_path).stem + '_temp_compressed.mp4')
             compress_video_worker = CompressVideoWorker(final_output_path, temp_compressed_path)
 
             self.thread_pool.start(compress_video_worker)
@@ -6463,6 +6495,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
             if os.path.exists(output_bgm_video_path):
                 os.remove(output_bgm_video_path)
 
+            cleanup_video_work(video_work_dir)
             data_dict = {
                 "标题": video_title.replace('|', ''),
                 "标签": video_tag,
@@ -6606,29 +6639,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
         self.add_log(f'读取视频文案,文案文件路径是{str(copy_file)}')
 
         # tts 速度
-        speed_value = str(self.all_setting_dict['voice_set']['spd_0'])
-        if not str(speed_value).startswith('-'):
-            speed_value = '+' + speed_value
-        speed_value = speed_value + '%'
-
-        # 获取音频设置
-        audio_setting = {
-            'api_type': self.all_setting_dict['voice_set']['api_type'],
-            'audio_role': self.audio_role_list[self.all_setting_dict['voice_set']['role_0']],
-            'speed_value': speed_value,
-            'volume_value': self.all_setting_dict['voice_set']['vol_0']
-        }
-
-        if self.all_setting_dict['voice_set']['api_type'] == 1:
-            # 获取音频设置
-            audio_setting = {
-                'api_type': self.all_setting_dict['voice_set']['api_type'],
-                'audio_role': int(
-                    self.audio_bd_role_list[self.all_setting_dict['voice_set']['role_1']].split(':')[1]),
-                'speed_value': self.all_setting_dict['voice_set']['spd_1'],
-                'volume_value': self.all_setting_dict['voice_set']['vol_1'],
-                'tone_value': self.all_setting_dict['voice_set']['pit_1']
-            }
+        audio_setting = build_audio_settings(self.all_setting_dict)
 
         while True:
 
@@ -6843,7 +6854,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     # 输出路径
                     video_name = re.sub(r'[^\u4e00-\u9fffA-Za-z0-9]', '', video_title) + '_0.mp4'
 
-                    video_file_path = os.path.join(saveVideoPath, video_name)
+                    video_file_path, final_video_path, video_work_dir = _create_video_stage_path(saveVideoPath, video_name)
 
                     excel_file_path_name = '1.xls'
                     # 任务文件输出路径
@@ -6896,7 +6907,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         break
 
                     bgAudioVolume = 40
-                    final_output_path = video_file_path.replace('_0.mp4', '.mp4')
+                    final_output_path = _final_video_path(video_file_path, out_dir_path)
                     addMusicWorker = AddMusicWorker(video_file_path, random_mp3_file_path, 100, bgAudioVolume,
                                                     final_output_path)
 
@@ -6921,6 +6932,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     if os.path.exists(video_file_path):
                         os.remove(video_file_path)
 
+                    cleanup_video_work(video_work_dir)
                     data_dict = {
                         "标题": video_title.replace('|', ''),
                         "标签": video_tag,
@@ -7046,29 +7058,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
             return
 
         # tts 速度
-        speed_value = str(self.all_setting_dict['voice_set']['spd_0'])
-        if not str(speed_value).startswith('-'):
-            speed_value = '+' + speed_value
-        speed_value = speed_value + '%'
-
-        # 获取音频设置
-        audio_setting = {
-            'api_type': self.all_setting_dict['voice_set']['api_type'],
-            'audio_role': self.audio_role_list[self.all_setting_dict['voice_set']['role_0']],
-            'speed_value': speed_value,
-            'volume_value': self.all_setting_dict['voice_set']['vol_0']
-        }
-
-        if self.all_setting_dict['voice_set']['api_type'] == 1:
-            # 获取音频设置
-            audio_setting = {
-                'api_type': self.all_setting_dict['voice_set']['api_type'],
-                'audio_role': int(
-                    self.audio_bd_role_list[self.all_setting_dict['voice_set']['role_1']].split(':')[1]),
-                'speed_value': self.all_setting_dict['voice_set']['spd_1'],
-                'volume_value': self.all_setting_dict['voice_set']['vol_1'],
-                'tone_value': self.all_setting_dict['voice_set']['pit_1']
-            }
+        audio_setting = build_audio_settings(self.all_setting_dict)
 
         while True:
 
@@ -7424,7 +7414,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     # 输出路径
                     video_name = re.sub(r'[^\u4e00-\u9fffA-Za-z0-9]', '', video_title) + '_0.mp4'
 
-                    video_file_path = os.path.join(saveVideoPath, video_name)
+                    video_file_path, final_video_path, video_work_dir = _create_video_stage_path(saveVideoPath, video_name)
 
                     excel_file_path_name = '1.xls'
                     # 任务文件输出路径
@@ -7542,7 +7532,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     QApplication.processEvents()
 
                     # 视频压缩
-                    temp_compressed_path = watermark_output_path.replace('_2.mp4', '_temp_compressed.mp4')
+                    temp_compressed_path = os.path.join(video_work_dir, Path(watermark_output_path).stem + '_temp_compressed.mp4')
                     compress_video_worker = CompressVideoWorker(watermark_output_path, temp_compressed_path)
 
                     self.thread_pool.start(compress_video_worker)
@@ -7558,7 +7548,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         QApplication.processEvents()
 
                     # 添加图片封面
-                    final_output_path = watermark_output_path.replace('_2.mp4', '.mp4')
+                    final_output_path = _final_video_path(video_file_path, out_dir_path)
                     # 添加视频封面工作流
                     addPicWorker = AddPicWorker(watermark_output_path, pic_title_video, 'white.png', pic_title_ass,
                                                 final_output_path)
@@ -7580,6 +7570,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     if os.path.exists(temp_compressed_path):
                         os.remove(temp_compressed_path)
 
+                    cleanup_video_work(video_work_dir)
                     data_dict = {
                         "标题": video_title.replace('|', ''),
                         "标签": video_tag,
@@ -7723,29 +7714,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                 self.all_setting_dict['part_title_part_5_set'] = model_set_dict['part_title_part_5_set']
 
             # tts 速度
-            speed_value = str(self.all_setting_dict['voice_set']['spd_0'])
-            if not str(speed_value).startswith('-'):
-                speed_value = '+' + speed_value
-            speed_value = speed_value + '%'
-
-            # 获取音频设置
-            audio_setting = {
-                'api_type': self.all_setting_dict['voice_set']['api_type'],
-                'audio_role': self.audio_role_list[self.all_setting_dict['voice_set']['role_0']],
-                'speed_value': speed_value,
-                'volume_value': self.all_setting_dict['voice_set']['vol_0']
-            }
-
-            if self.all_setting_dict['voice_set']['api_type'] == 1:
-                # 获取音频设置
-                audio_setting = {
-                    'api_type': self.all_setting_dict['voice_set']['api_type'],
-                    'audio_role': int(
-                        self.audio_bd_role_list[self.all_setting_dict['voice_set']['role_1']].split(':')[1]),
-                    'speed_value': self.all_setting_dict['voice_set']['spd_1'],
-                    'volume_value': self.all_setting_dict['voice_set']['vol_1'],
-                    'tone_value': self.all_setting_dict['voice_set']['pit_1']
-                }
+            audio_setting = build_audio_settings(self.all_setting_dict)
 
             # 获取视频文案
             video_title_text = get_row_data(copy_file, copy_start_num)
@@ -8190,7 +8159,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     # 输出路径
                     video_name = re.sub(r'[^\u4e00-\u9fffA-Za-z0-9]', '', video_title) + '_0.mp4'
 
-                    video_file_path = os.path.join(saveVideoPath, video_name)
+                    video_file_path, final_video_path, video_work_dir = _create_video_stage_path(saveVideoPath, video_name)
 
                     excel_file_path_name = '1.xls'
                     # 任务文件输出路径
@@ -8308,7 +8277,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     QApplication.processEvents()
 
                     # 视频压缩
-                    temp_compressed_path = watermark_output_path.replace('_2.mp4', '_temp_compressed.mp4')
+                    temp_compressed_path = os.path.join(video_work_dir, Path(watermark_output_path).stem + '_temp_compressed.mp4')
                     compress_video_worker = CompressVideoWorker(watermark_output_path, temp_compressed_path)
 
                     self.thread_pool.start(compress_video_worker)
@@ -8324,7 +8293,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         QApplication.processEvents()
 
                     # 添加图片封面
-                    final_output_path = watermark_output_path.replace('_2.mp4', '.mp4')
+                    final_output_path = _final_video_path(video_file_path, out_dir_path)
                     # 添加视频封面工作流
                     addPicWorker = AddPicWorker(watermark_output_path, pic_title_video, 'white.png', pic_title_ass,
                                                 final_output_path)
@@ -8346,6 +8315,7 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                     if os.path.exists(temp_compressed_path):
                         os.remove(temp_compressed_path)
 
+                    cleanup_video_work(video_work_dir)
                     data_dict = {
                         "标题": video_title.replace('|', ''),
                         "标签": video_tag,
@@ -13177,29 +13147,19 @@ def read_dict_from_txt(file_path):
 
 
 def migrate_legacy_voice_setting(settings, file_path='setting.txt'):
-    """Move old Edge-TTS settings to Baidu whenever a setting is loaded.
-
-    Existing installations and saved templates can contain ``api_type=0``.
-    Every read must migrate that value because generation paths reload settings
-    after startup and otherwise re-enable the unavailable Edge endpoint.
-    """
+    """Keep the chosen TTS provider independent of per-account visual templates."""
     voice = settings.get('voice_set') if isinstance(settings, dict) else None
     if not isinstance(voice, dict):
         return settings
-    try:
-        is_legacy_edge = int(voice.get('api_type', 1)) == 0
-    except (TypeError, ValueError):
-        is_legacy_edge = False
-    if not is_legacy_edge:
-        return settings
-
-    voice['api_type'] = 1
-    try:
-        write_dict_to_txt(file_path, settings)
-    except OSError as error:
-        print(f'保存百度配音默认设置失败，将继续使用内存配置: {error}')
+    preferences = load_voice_preferences()
+    selected_provider = preferences.get('api_type')
+    if selected_provider is None:
+        selected_provider = voice.get('api_type', 1)
+    voice['api_type'] = normalize_tts_provider(selected_provider, default=1)
+    voice['random_voice'] = bool(
+        preferences.get('random_voice', voice.get('random_voice', True))
+    )
     return settings
-
 
 def sec_to_ass(t: float) -> str:
     """把秒数转成 hh:mm:ss.cc 格式的 ASS 时间字符串"""

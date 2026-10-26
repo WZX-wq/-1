@@ -18,6 +18,8 @@ from database_tool.video_load_tool import (
 )
 from excel_tool.excel_tool import write_to_old_excel
 from ffmpeg_tool.subtitles_audio_tool import get_audio_length
+from voice_catalog import EDGE_VOICE_ROLES, BAIDU_VOICE_ROLE_IDS
+from voice_config import normalize_tts_provider
 
 from .errors import MediaGenerationError, TitleGenerationError
 from .media_core import (
@@ -32,23 +34,8 @@ from .subtitle_style import (
 )
 
 
-EDGE_ROLES = (
-    "zh-CN-YunxiNeural",
-    "zh-CN-XiaoxiaoNeural",
-    "zh-CN-XiaoxuanNeural",
-    "zh-CN-XiaoyiNeural",
-    "zh-CN-YunjianNeural",
-    "zh-CN-YunxiaNeural",
-    "zh-CN-YunyangNeural",
-    "zh-CN-liaoning-XiaobeiNeural",
-    "zh-CN-shaanxi-XiaoniNeural",
-)
-BAIDU_ROLES = (
-    1, 0, 3, 4, 5003, 5118, 106, 5, 4003, 4106, 4115, 5147, 5976,
-    5971, 4164, 4176, 4259, 4119, 4105, 4117, 4288, 4192, 4100, 4103,
-    4144, 4278, 4143, 4140, 4129, 4149, 4254, 4206, 4147, 4141, 4226,
-    4179, 4146, 6567, 4156, 4189, 4194, 4193, 4195, 4196, 4197,
-)
+EDGE_ROLES = EDGE_VOICE_ROLES
+BAIDU_ROLES = BAIDU_VOICE_ROLE_IDS
 
 
 @dataclass(frozen=True)
@@ -110,18 +97,27 @@ class MediaBackend(Protocol):
 
 def build_audio_settings(settings: dict) -> dict:
     voice = settings["voice_set"]
-    api_type = int(voice["api_type"])
-    # Edge's public websocket endpoint now frequently returns 403. Treat old
-    # api_type=0 account files as legacy configuration and use the configured
-    # Baidu voice instead of allowing generation to enter the dead endpoint.
+    api_type = normalize_tts_provider(voice.get("api_type", 1), default=1)
     if api_type == 0:
-        api_type = 1
+        role = voice.get("role_0_name") or EDGE_ROLES[int(voice.get("role_0", 0)) % len(EDGE_ROLES)]
+        speed = int(voice.get("spd_0", 0))
+        speed = f"{speed:+d}%"
+        volume = voice.get("vol_0", 0)
+        tone = 0
+    elif api_type == 1:
+        role = BAIDU_ROLES[int(voice.get("role_1", 0)) % len(BAIDU_ROLES)]
+        speed = voice.get("spd_1", 5)
+        volume = voice.get("vol_1", 5)
+        tone = voice.get("pit_1", 5)
+    else:
+        raise ValueError(f"不支持的配音服务编号：{api_type}")
     return {
         "api_type": api_type,
-        "audio_role": BAIDU_ROLES[int(voice.get("role_1", 0))],
-        "speed_value": voice.get("spd_1", 5),
-        "volume_value": voice.get("vol_1", 5),
-        "tone_value": voice.get("pit_1", 5),
+        "audio_role": role,
+        "speed_value": speed,
+        "volume_value": volume,
+        "tone_value": tone,
+        "random_voice": bool(voice.get("random_voice", True)),
     }
 
 

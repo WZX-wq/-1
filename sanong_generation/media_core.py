@@ -14,6 +14,7 @@ from typing import Awaitable, Callable, Optional, Sequence
 from ffmpeg_tool.add_music_tool import add_bgm_to_video
 from ffmpeg_tool.subtitles_audio_tool import (
     add_audio_and_subtitles_to_part,
+    choose_random_audio_voice,
     produce_audio_and_subtitles_to_path,
 )
 from ffmpeg_tool.video_concat_tool import addCover, concatenate_videos_in_segments
@@ -57,6 +58,7 @@ def generate_audio_subtitles(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     api_type = audio_settings["api_type"]
+    audio_settings = choose_random_audio_voice(audio_settings)
     generated: list[AudioSubtitle] = []
 
     def cleanup_partial(index: int) -> None:

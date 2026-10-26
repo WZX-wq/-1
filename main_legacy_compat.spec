@@ -49,6 +49,7 @@ if private_ai_module is not None:
 runtime_data = [
     ('tb.ico', '.'),
     ('video_ai_config.example.json', '.'),
+    ('voice_preferences.example.json', '.'),
     # UI and template assets used through paths relative to the executable.
     ('soft_pic', 'soft_pic'),
     ('endCredits', 'endCredits'),

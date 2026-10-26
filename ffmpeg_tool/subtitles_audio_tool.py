@@ -1,18 +1,22 @@
 # -*- coding: utf-8 -*-
 # 字幕文件，配音文件
 import asyncio
+import random
 import re
 import subprocess
 import tempfile
 import time
+from pathlib import Path
 
 import requests
-from edge_tts import Communicate
+from edge_tts import Communicate, list_voices
 from pydub import AudioSegment
 import os
 import datetime
 from tqdm import tqdm
 from zhconv import convert  # 简繁体转换
+from voice_catalog import EDGE_VOICE_ROLES, BAIDU_VOICE_ROLE_IDS
+from voice_config import load_voice_preferences, normalize_tts_provider
 
 # 百度api
 API_KEY = "HCMW3AxwYcK7R2GsgSLGcie6"
@@ -34,6 +38,56 @@ def split_text_into_sentences(text):
     sentences = re.split(r'(?<=[，。！？])|\s+', text)  # 按中文标点或者空格分割句子
     sentences = [re.sub(r'[，。！？\s]', '', s) for s in sentences if s.strip()]  # 去除空句子
     return sentences
+
+
+def choose_random_audio_voice(audio_setting, chooser=random.choice):
+    """Choose an available voice once per video for Edge or Baidu TTS."""
+    selected = dict(audio_setting)
+    if selected.get("_voice_selected"):
+        return selected
+    provider = normalize_tts_provider(selected.get("api_type", 0), default=1)
+    selected["api_type"] = provider
+    if not selected.get("random_voice", True):
+        return selected
+
+    if provider == 0:
+        options = load_voice_preferences().get("edge_voice_options") or list(EDGE_VOICE_ROLES)
+        options = [str(item).strip() for item in options if str(item).strip()]
+    else:
+        options = list(BAIDU_VOICE_ROLE_IDS)
+    if not options:
+        raise RuntimeError("当前配音服务没有可用音色，请检查音色设置。")
+
+    selected["audio_role"] = chooser(options)
+    if provider == 0:
+        selected["speaker_roles"] = {
+            "A": chooser(options),
+            "B": chooser(options),
+        }
+    selected["_voice_selected"] = True
+    return selected
+
+
+async def synthesize_provider_voice(audio_setting, text, output_path):
+    """Synthesize one segment through the selected Edge or Baidu provider."""
+    provider = normalize_tts_provider(audio_setting.get("api_type", 0), default=1)
+    if provider == 0:
+        await generate_voice(
+            one_text=text,
+            output_path=output_path,
+            increase_db=audio_setting.get("volume_value", 0),
+            voice_name=audio_setting.get("audio_role", "zh-CN-YunxiNeural"),
+            speed=audio_setting.get("speed_value", "+0%"),
+        )
+        return
+    return bd_generate_voice(
+        text=text,
+        out_path=output_path,
+        role=audio_setting.get("audio_role", 1),
+        spd=audio_setting.get("speed_value", 5),
+        pit=audio_setting.get("tone_value", 5),
+        vol=audio_setting.get("volume_value", 5),
+    )
 
 # 说话人补全切句
 def split_and_restore_speakers(text: str):
@@ -460,6 +514,7 @@ async def produce_audio_and_subtitles(timestamp, subtitles_text):
 
 
 async def produce_audio_and_subtitles_to_path(api_type, video_tamp_path, subtitles_text, clips_num, audio_setting):
+    audio_setting = choose_random_audio_voice(audio_setting)
     sentences = split_text_into_sentences(subtitles_text)
     segments = [{"text": sentence} for sentence in sentences]
 
@@ -471,23 +526,7 @@ async def produce_audio_and_subtitles_to_path(api_type, video_tamp_path, subtitl
     for i, seg in enumerate(segments):
         voice_path = f"temp_voice_{i}.mp3"
         full_voice_path = os.path.join(video_tamp_path, voice_path)
-        if api_type == 0:
-            await generate_voice(
-                one_text=seg["text"],
-                output_path=full_voice_path,
-                increase_db=audio_setting['volume_value'],
-                voice_name=audio_setting['audio_role'],
-                speed=audio_setting['speed_value']
-            )
-        else:
-            bd_generate_voice(
-                text=seg["text"],
-                out_path=full_voice_path,
-                role=audio_setting['audio_role'],
-                spd=audio_setting['speed_value'],
-                pit=audio_setting['tone_value'],
-                vol=audio_setting['volume_value']
-            )
+        await synthesize_provider_voice(audio_setting, seg["text"], full_voice_path)
 
         if not os.path.isfile(full_voice_path) or os.path.getsize(full_voice_path) == 0:
             raise FileNotFoundError(f"配音文件未生成：{full_voice_path}")
@@ -522,6 +561,7 @@ async def produce_audio_and_subtitles_to_path(api_type, video_tamp_path, subtitl
 
 
 async def AB_produce_audio_and_subtitles_to_path(api_type, video_tamp_path, subtitles_text, clips_num, audio_setting):
+    audio_setting = choose_random_audio_voice(audio_setting)
     sentences = split_and_restore_speakers(subtitles_text)
     segments = [{"text": sentence} for sentence in sentences]
 
@@ -533,27 +573,15 @@ async def AB_produce_audio_and_subtitles_to_path(api_type, video_tamp_path, subt
     for i, seg in enumerate(segments):
         voice_path = f"temp_voice_{i}.mp3"
         full_voice_path = os.path.join(video_tamp_path, voice_path)
-        if api_type == 0:
-            if seg["text"].startswith('A:'):
-                audio_setting['audio_role'] = 'zh-CN-XiaoxiaoNeural'
-            elif seg["text"].startswith('B:'):
-                audio_setting['audio_role'] = 'zh-CN-YunxiNeural'
-            await generate_voice(
-                one_text=seg["text"].replace('A:', '').replace('B:', ''),
-                output_path=full_voice_path,
-                increase_db=audio_setting['volume_value'],
-                voice_name=audio_setting['audio_role'],
-                speed=audio_setting['speed_value']
+        speaker = seg["text"][:1]
+        text = seg["text"].replace('A:', '').replace('B:', '')
+        segment_setting = audio_setting
+        if int(api_type) == 0 and speaker in {"A", "B"}:
+            segment_setting = dict(audio_setting)
+            segment_setting["audio_role"] = audio_setting.get("speaker_roles", {}).get(
+                speaker, audio_setting.get("audio_role")
             )
-        else:
-            bd_generate_voice(
-                text=seg["text"],
-                out_path=full_voice_path,
-                role=audio_setting['audio_role'],
-                spd=audio_setting['speed_value'],
-                pit=audio_setting['tone_value'],
-                vol=audio_setting['volume_value']
-            )
+        await synthesize_provider_voice(segment_setting, text, full_voice_path)
 
         # 获取语音文件的实际长度
         audio_length = get_audio_length(full_voice_path)
