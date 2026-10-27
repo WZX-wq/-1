@@ -335,6 +335,45 @@ class MaterialCandidateFilterTests(unittest.TestCase):
         ))
         self.assertEqual({video['id'] for video in excluded_by_allowed_ids}, {410})
 
+    def test_offline_location_china_matches_database_unrestricted_location_behavior(self):
+        with tempfile.TemporaryDirectory() as root:
+            root_path = Path(root)
+            cache_dir = root_path / 'cacheVideo'
+            cache_dir.mkdir()
+            (cache_dir / '411.mp4').write_bytes(b'local-video')
+            (root_path / 'material_index.json').write_text(
+                '[{"id":411,"tags":"靖安_森林","city":"宜春市",'
+                '"screen":0,"duration":8,"material_category":"普通素材"}]',
+                encoding='utf-8',
+            )
+            with patch.object(video_load_tool.os, 'getcwd', return_value=str(root_path)), \
+                    patch.object(video_load_tool, '_material_candidate_cache', {}), \
+                    patch.object(video_load_tool, '_material_index_loaded', False):
+                result = video_load_tool._offline_material_candidates(
+                    '靖安', 0, '中国', 8, cate='普通素材'
+                )
+
+        self.assertEqual([video['id'] for video in result], [411])
+
+    def test_compound_chinese_keyword_retries_relevant_suffix_with_same_filters(self):
+        calls = []
+
+        def exact_query(keyword, screen, location, audio_length, poor_time, category):
+            calls.append((keyword, screen, location, audio_length, poor_time, category))
+            if keyword == '三爪仑':
+                return [{'id': 412, 'tags': '宜春_靖安_三爪仑'}]
+            return []
+
+        with patch.object(video_load_tool, '_get_videos_by_keyword_1_exact', side_effect=exact_query):
+            result = video_load_tool.get_videos_by_keyword_1(
+                '宜春靖安三爪仑', 0, '宜春市', 8, 20, '普通素材'
+            )
+
+        self.assertEqual([video['id'] for video in result], [412])
+        self.assertIn('三爪仑', [call[0] for call in calls])
+        self.assertTrue(all(call[1:] == (0, '宜春市', 8, 20, '普通素材') for call in calls))
+        self.assertIn('三爪仑', video_load_tool._material_keyword_variants('宜春-靖安-三爪仑'))
+
     def test_unindexed_local_videos_are_not_used_as_offline_fallback(self):
         with tempfile.TemporaryDirectory() as root:
             root_path = Path(root)
@@ -403,6 +442,45 @@ class MaterialCandidateFilterTests(unittest.TestCase):
 
 
 class SanongGenerationTests(unittest.TestCase):
+    def test_first_matching_tag_fallback_uses_next_candidate_without_dropping_filters(self):
+        import main
+
+        queried = []
+
+        def query(keyword):
+            queried.append(keyword)
+            if keyword == '森林':
+                return [{'id': 73, 'tags': '森林_靖安'}]
+            return []
+
+        index, videos = main._find_first_tag_match(
+            ['宜春靖安三爪仑', '森林', '旅游'], query
+        )
+
+        self.assertEqual(index, 1)
+        self.assertEqual(videos, [{'id': 73, 'tags': '森林_靖安'}])
+        self.assertEqual(queried, ['宜春靖安三爪仑', '森林'])
+
+    def test_first_matching_tag_fallback_checks_all_complete_tags_before_shortening(self):
+        import main
+
+        queried = []
+
+        def query(keyword):
+            queried.append(keyword)
+            if keyword == '三爪仑':
+                return [{'id': 74, 'tags': '靖安_三爪仑'}]
+            return []
+
+        index, videos = main._find_first_tag_match(
+            ['宜春靖安三爪仑', '森林'], query
+        )
+
+        self.assertEqual(index, 0)
+        self.assertEqual(videos, [{'id': 74, 'tags': '靖安_三爪仑'}])
+        self.assertEqual(queried[:2], ['宜春靖安三爪仑', '森林'])
+        self.assertLess(queried.index('森林'), queried.index('三爪仑'))
+
     def test_material_worker_reports_empty_copywriting_instead_of_skipping(self):
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as root:
             title_file = Path(root) / "titles.xlsx"
@@ -459,6 +537,43 @@ class SanongGenerationTests(unittest.TestCase):
                 "闲置土地如何利用&&土地利用,农业政策,三农&&开场&&介绍闲置土地利用方法",
                 "闲置土地,土地利用&&农业政策",
             )
+
+    def test_strategy_worker_normalizes_dict_entries_in_ai_tags_before_writing(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as root:
+            title_file = Path(root) / 'titles.xlsx'
+            errors = []
+            writes = []
+
+            class _Column:
+                def tolist(self):
+                    return ['三爪仑森林旅游']
+
+            class _Frame:
+                @property
+                def iloc(self):
+                    return self
+
+                def __getitem__(self, _key):
+                    return _Column()
+
+            def capture_write(path, values):
+                writes.append((Path(path).name, list(values)))
+
+            with patch.object(ai_worker, '_read_excel', return_value=_Frame()), \
+                    patch.object(ai_worker, 'douBao_ai_strategy_content', return_value=['景区坐落在靖安县'] ), \
+                    patch.object(ai_worker, 'segment_title', return_value='三爪仑森林旅游'), \
+                    patch.object(ai_worker, 'deepseek_ai_strategy_topic', return_value=['江西']), \
+                    patch.object(ai_worker, 'deepseek_ai_strategy_tag', return_value=[
+                        '三爪仑', {'keyword': '森林'}, {'name': '靖安'}, {'ignored': {'value': 'nested'}}
+                    ]), \
+                    patch.object(ai_worker, 'write_arrays_to_excel', side_effect=capture_write):
+                worker = ai_worker.AiDisposeStrategyTitle(str(title_file), 'Ai游江西')
+                worker.signals.errorOccurred.connect(errors.append)
+                worker.run()
+
+        self.assertEqual(errors, [])
+        label_writes = [values for name, values in writes if name.endswith('_label.xlsx')]
+        self.assertEqual(label_writes, [['三爪仑,森林,靖安']])
 
     def test_afr_keyword_query_is_scoped_to_sanong_materials(self):
         cursor = unittest.mock.Mock()

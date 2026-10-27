@@ -128,6 +128,7 @@ from database_tool.user_load_tool import add_user_task, get_account_by_name, upd
 from database_tool.mysql_read_tool import fetch_with_retry
 from database_tool.material_download_tool import get_last_material_download_error
 from database_tool.video_load_tool import get_videos_by_keyword_1, get_videos_by_keyword, download_video, get_random_id, \
+    _get_videos_by_keyword_1_exact, _material_keyword_variants, \
     add_lost_video_record, cut_video_by_audio_length, get_random_cover_video, get_cover_video_collect_all, download_cover_video, ftp_ai_upload, \
     download_cn_video, get_video_model_list, delete_video_model, \
     update_video_model, add_video_model, get_random_video_model, get_unused_title_info, mark_title_generated, \
@@ -188,6 +189,23 @@ import logging
 # Keep a useful session history in the UI; progress updates are appended below.
 MAX_LINES = 5000
 _active_generation_window = None
+
+
+def _find_first_tag_match(tags, query):
+    """Try every complete tag before a bounded suffix of any tag."""
+    normalized_tags = [str(tag or '').strip() for tag in tags or []]
+    for index, keyword in enumerate(normalized_tags):
+        if keyword:
+            videos = query(keyword)
+            if videos:
+                return index, videos
+
+    for index, keyword in enumerate(normalized_tags):
+        for variant in _material_keyword_variants(keyword)[1:]:
+            videos = query(variant)
+            if videos:
+                return index, videos
+    return None, []
 
 
 def _create_video_stage_path(output_dir, intermediate_name):
@@ -2795,11 +2813,19 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                                 ftp_video_List = []
                                 # 地区景区匹配到的id
                                 location_id_list = []
-                                for n, tag in enumerate(part_video_tags):
-                                    if len(location_id_list) == 0 and n == 0:
-                                        ftp_videos = get_videos_by_keyword_1(tag, self.screenComboBox.currentIndex(),
-                                                                             self.locationlineEdit.text().strip(),
-                                                                             audio_length, 20, "美食素材")
+                                first_match_index, first_match_videos = _find_first_tag_match(
+                                    part_video_tags,
+                                    lambda keyword: _get_videos_by_keyword_1_exact(
+                                        keyword, self.screenComboBox.currentIndex(),
+                                        self.locationlineEdit.text().strip(), audio_length, 20, "美食素材"
+                                    ),
+                                )
+                                if first_match_index is None:
+                                    first_match_index = 0
+                                for n, tag in enumerate(
+                                        part_video_tags[first_match_index:], start=first_match_index):
+                                    if len(location_id_list) == 0 and n == first_match_index:
+                                        ftp_videos = first_match_videos
 
                                         if len(ftp_videos) <= 0:
                                             print('缺少该关键字的素材')
@@ -3607,11 +3633,19 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                                 ftp_video_List = []
                                 # 地区景区匹配到的id
                                 location_id_list = []
-                                for n, tag in enumerate(part_video_tags):
-                                    if len(location_id_list) == 0 and n == 0:
-                                        ftp_videos = get_videos_by_keyword_1(tag, self.screenComboBox.currentIndex(),
-                                                                             self.locationlineEdit.text().strip(),
-                                                                             audio_length, 20, "普通素材")
+                                first_match_index, first_match_videos = _find_first_tag_match(
+                                    part_video_tags,
+                                    lambda keyword: _get_videos_by_keyword_1_exact(
+                                        keyword, self.screenComboBox.currentIndex(),
+                                        self.locationlineEdit.text().strip(), audio_length, 20, "普通素材"
+                                    ),
+                                )
+                                if first_match_index is None:
+                                    first_match_index = 0
+                                for n, tag in enumerate(
+                                        part_video_tags[first_match_index:], start=first_match_index):
+                                    if len(location_id_list) == 0 and n == first_match_index:
+                                        ftp_videos = first_match_videos
 
                                         if len(ftp_videos) <= 0:
                                             print('缺少该关键字的素材')
@@ -4274,12 +4308,19 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                                 ftp_video_List = []
                                 # 地区景区匹配到的id
                                 location_id_list = []
-                                for n, tag in enumerate(part_video_tags):
-                                    if len(location_id_list) == 0 and n == 0:
-                                        ftp_videos = get_videos_by_keyword_1(tag,
-                                                                             self.screenComboBox.currentIndex(),
-                                                                             self.locationlineEdit.text().strip(),
-                                                                             audio_length, 20,'城市通用')
+                                first_match_index, first_match_videos = _find_first_tag_match(
+                                    part_video_tags,
+                                    lambda keyword: _get_videos_by_keyword_1_exact(
+                                        keyword, self.screenComboBox.currentIndex(),
+                                        self.locationlineEdit.text().strip(), audio_length, 20, '城市通用'
+                                    ),
+                                )
+                                if first_match_index is None:
+                                    first_match_index = 0
+                                for n, tag in enumerate(
+                                        part_video_tags[first_match_index:], start=first_match_index):
+                                    if len(location_id_list) == 0 and n == first_match_index:
+                                        ftp_videos = first_match_videos
 
                                         if len(ftp_videos) <= 0:
                                             print('缺少该关键字的素材')
@@ -4972,15 +5013,20 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                             ftp_video_List = []
                             # 地区景区匹配到的id
                             location_id_list = []
-                            for n, tag in enumerate(part_video_tags):
-                                if len(location_id_list) == 0 and n == 0:
-                                    # 去除tag中所有标点符号
+                            first_match_index, first_match_videos = _find_first_tag_match(
+                                part_video_tags,
+                                lambda keyword: _get_videos_by_keyword_1_exact(
+                                    re.sub(r'[^\w\s]', '', keyword), self.screenComboBox.currentIndex(),
+                                    self.locationlineEdit.text().strip(), audio_length, 10
+                                ),
+                            )
+                            if first_match_index is None:
+                                first_match_index = 0
+                            for n, tag in enumerate(
+                                    part_video_tags[first_match_index:], start=first_match_index):
+                                if len(location_id_list) == 0 and n == first_match_index:
                                     tag = re.sub(r'[^\w\s]', '', tag)
-
-                                    # 尝试关键字匹配视频，未匹配上Ai处理更换同义关键字再进行匹配
-                                    ftp_videos = get_videos_by_keyword_1(tag, self.screenComboBox.currentIndex(),
-                                                                         self.locationlineEdit.text().strip(),
-                                                                         audio_length, 10)
+                                    ftp_videos = first_match_videos
 
                                     synonyms_list = []
 
@@ -5580,22 +5626,19 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         ftp_video_List = []
                         # 地区景区匹配到的id
                         location_id_list = []
-                        for n, tag in enumerate(part_video_tags):
-                            if len(location_id_list) == 0 and n == 0:
-                                ftp_videos = get_videos_by_keyword_1(tag,
-                                                                     self.screenComboBox.currentIndex(),
-                                                                     self.locationlineEdit.text().strip(),
-                                                                     audio_length, 20, "普通素材")
-
-                                # 重试关键字匹配
-                                n = 0
-                                while len(ftp_videos) <= 0 and n < 4:
-                                    time.sleep(5)
-                                    ftp_videos = get_videos_by_keyword_1(tag,
-                                                                         self.screenComboBox.currentIndex(),
-                                                                         self.locationlineEdit.text().strip(),
-                                                                         audio_length, 20, "普通素材")
-                                    n += 1
+                        first_match_index, first_match_videos = _find_first_tag_match(
+                            part_video_tags,
+                            lambda keyword: _get_videos_by_keyword_1_exact(
+                                keyword, self.screenComboBox.currentIndex(),
+                                self.locationlineEdit.text().strip(), audio_length, 20, "普通素材"
+                            ),
+                        )
+                        if first_match_index is None:
+                            first_match_index = 0
+                        for n, tag in enumerate(
+                                part_video_tags[first_match_index:], start=first_match_index):
+                            if len(location_id_list) == 0 and n == first_match_index:
+                                ftp_videos = first_match_videos
 
                                 if len(ftp_videos) <= 0:
                                     print('缺少该关键字的素材')
@@ -7269,12 +7312,19 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                         ftp_video_List = []
                         # 地区景区匹配到的id
                         location_id_list = []
-                        for n, tag in enumerate(part_video_tags):
-                            if len(location_id_list) == 0 and n == 0:
-                                ftp_videos = get_videos_by_keyword_1(tag,
-                                                                     self.screenComboBox.currentIndex(),
-                                                                     self.locationlineEdit.text().strip(),
-                                                                     audio_length, 20)
+                        first_match_index, first_match_videos = _find_first_tag_match(
+                            part_video_tags,
+                            lambda keyword: _get_videos_by_keyword_1_exact(
+                                keyword, self.screenComboBox.currentIndex(),
+                                self.locationlineEdit.text().strip(), audio_length, 20
+                            ),
+                        )
+                        if first_match_index is None:
+                            first_match_index = 0
+                        for n, tag in enumerate(
+                                part_video_tags[first_match_index:], start=first_match_index):
+                            if len(location_id_list) == 0 and n == first_match_index:
+                                ftp_videos = first_match_videos
 
                                 synonyms_list = []
 
@@ -8022,15 +8072,20 @@ class BatchAICutter(QWidget, Ui_new_batch_ai_autocut):
                             ftp_video_List = []
                             # 地区景区匹配到的id
                             location_id_list = []
-                            for n, tag in enumerate(part_video_tags):
-                                if len(location_id_list) == 0 and n == 0:
-                                    # 去除tag中所有标点符号
+                            first_match_index, first_match_videos = _find_first_tag_match(
+                                part_video_tags,
+                                lambda keyword: _get_videos_by_keyword_1_exact(
+                                    re.sub(r'[^\w\s]', '', keyword), self.screenComboBox.currentIndex(),
+                                    self.locationlineEdit.text().strip(), audio_length, 20
+                                ),
+                            )
+                            if first_match_index is None:
+                                first_match_index = 0
+                            for n, tag in enumerate(
+                                    part_video_tags[first_match_index:], start=first_match_index):
+                                if len(location_id_list) == 0 and n == first_match_index:
                                     tag = re.sub(r'[^\w\s]', '', tag)
-
-                                    # 尝试关键字匹配视频，未匹配上Ai处理更换同义关键字再进行匹配
-                                    ftp_videos = get_videos_by_keyword_1(tag, self.screenComboBox.currentIndex(),
-                                                                         self.locationlineEdit.text().strip(),
-                                                                         audio_length, 20)
+                                    ftp_videos = first_match_videos
 
                                     synonyms_list = []
 

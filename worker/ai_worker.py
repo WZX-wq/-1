@@ -26,6 +26,34 @@ def _read_excel(*args, **kwargs):
     return pd.read_excel(*args, **kwargs)
 
 
+def _normalize_ai_tag_values(value):
+    """Convert AI tag responses to clean strings before persistence."""
+    tag_fields = (
+        'tag', 'keyword', 'keywords', 'tags', 'items', 'data', 'name', 'value',
+        'label', '关键词', '标签',
+    )
+    normalized = []
+
+    def add(item):
+        if isinstance(item, str):
+            tag = item.strip()
+            if tag:
+                normalized.append(tag)
+            return
+        if isinstance(item, dict):
+            for field in tag_fields:
+                if field in item:
+                    add(item[field])
+                    return
+            return
+        if isinstance(item, (list, tuple, set)):
+            for nested in item:
+                add(nested)
+
+    add(value)
+    return list(dict.fromkeys(normalized))
+
+
 # ai分析文案 通用类
 class AiDisposeStrategyTitle(QRunnable):
     def __init__(self, excel_file_path, account_name, title_id=-1):
@@ -89,7 +117,7 @@ class AiDisposeStrategyTitle(QRunnable):
                         tag_list = deepseek_ai_strategy_tag(title, ai_word)
 
                     # 关键词字符串
-                    tag_list_str = ','.join(tag_list)
+                    tag_list_str = ','.join(_normalize_ai_tag_values(tag_list))
                     tag_list_str_list.append(tag_list_str)
 
                 # 将片段标签写入excel表格中
@@ -171,7 +199,7 @@ class AiDisposeScenicSpotTitle(QRunnable):
                         tag_list = deepseek_ai_strategy_scenic_tag(title, ai_word)
 
                     # 关键词字符串
-                    tag_list_str = ','.join(tag_list)
+                    tag_list_str = ','.join(_normalize_ai_tag_values(tag_list))
                     tag_list_str_list.append(tag_list_str)
 
                 # 将片段标签写入excel表格中
@@ -325,7 +353,7 @@ class AiDisposeIntroTitle(QRunnable):
                         tag_list = deepseek_ai_intro_tag(title, ai_word)
 
                     # 关键词字符串
-                    tag_list_str = ','.join(tag_list)
+                    tag_list_str = ','.join(_normalize_ai_tag_values(tag_list))
                     tag_list_str_list.append(tag_list_str)
 
                 # 将片段标签写入excel表格中
@@ -411,7 +439,7 @@ class AiDisposeCNIntroTitle(QRunnable):
                         tag_list = deepseek_ai_intro_tag(title, ai_word)
 
                     # 关键词字符串
-                    tag_list_str = ','.join(tag_list)
+                    tag_list_str = ','.join(_normalize_ai_tag_values(tag_list))
                     tag_list_str_list.append(tag_list_str)
 
                 # 将片段标签写入excel表格中
@@ -492,7 +520,7 @@ class AiDisposeMsIntroTitle(QRunnable):
                         tag_list = deepseek_ai_intro_tag(title, ai_word)
 
                     # 关键词字符串
-                    tag_list_str = ','.join(tag_list)
+                    tag_list_str = ','.join(_normalize_ai_tag_values(tag_list))
                     tag_list_str_list.append(tag_list_str)
 
                 # 将片段标签写入excel表格中
@@ -624,7 +652,7 @@ class AiDisposeIntro(QRunnable):
                     tag_list = deepseek_ai_intro_tag(ai_title, ai_word)
 
                 # 关键词字符串
-                tag_list_str = ','.join(tag_list)
+                tag_list_str = ','.join(_normalize_ai_tag_values(tag_list))
                 tag_list_str_list.append(tag_list_str)
 
             # 将片段标签写入excel表格中
@@ -701,7 +729,7 @@ class AiDisposeStrategy(QRunnable):
                     tag_list = deepseek_ai_strategy_tag(ai_title, ai_word)
 
                 # 关键词字符串
-                tag_list_str = ','.join(tag_list)
+                tag_list_str = ','.join(_normalize_ai_tag_values(tag_list))
                 tag_list_str_list.append(tag_list_str)
 
             # 将片段标签写入excel表格中
@@ -782,7 +810,7 @@ class AiDisposeQATitle(QRunnable):
                         tag_list = deepseek_ai_intro_1_tag(title, ai_word)
 
                     # 关键词字符串
-                    tag_list_str = ','.join(tag_list)
+                    tag_list_str = ','.join(_normalize_ai_tag_values(tag_list))
                     tag_list_str_list.append(tag_list_str)
 
                 # 将片段标签写入excel表格中
@@ -892,7 +920,7 @@ class AiDisposeIMGTitle(QRunnable):
                         tag_list = []
 
                     # 关键词字符串
-                    tag_list_str = ','.join(tag_list)
+                    tag_list_str = ','.join(_normalize_ai_tag_values(tag_list))
                     tag_list_str_list.append(tag_list_str)
 
                 # 将片段标签写入excel表格中
@@ -969,7 +997,7 @@ class AiDisposeHistoryStrategyTitle(QRunnable):
                         tag_list = deepseek_ai_strategy_history_tag(title, ai_word)
 
                     # 关键词字符串
-                    tag_list_str = ','.join(tag_list)
+                    tag_list_str = ','.join(_normalize_ai_tag_values(tag_list))
                     tag_list_str_list.append(tag_list_str)
 
                 # 将片段标签写入excel表格中
@@ -1060,7 +1088,7 @@ class AiDisposeFoodStrategyTitle(QRunnable):
                         tag_list = []
 
                     # 关键词字符串
-                    tag_list_str = ','.join(tag_list)
+                    tag_list_str = ','.join(_normalize_ai_tag_values(tag_list))
                     tag_list_str_list.append(tag_list_str)
 
                 # 将片段标签写入excel表格中
@@ -1148,7 +1176,7 @@ class AiDisposeFestivalCustomsTitle(QRunnable):
                         tag_list = []
 
                     # 关键词字符串
-                    tag_list_str = ','.join(tag_list)
+                    tag_list_str = ','.join(_normalize_ai_tag_values(tag_list))
                     tag_list_str_list.append(tag_list_str)
 
                 # 将片段标签写入excel表格中

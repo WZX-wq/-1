@@ -2,6 +2,7 @@
 import datetime
 import json
 import random
+import re
 import shutil
 import subprocess
 import threading
@@ -141,7 +142,7 @@ def _offline_material_candidates(keyword, screen, location, audio_length,
         if keyword and keyword not in tags:
             continue
         city = str(video.get('city') or '')
-        if location and location not in city:
+        if location and location != '中国' and location not in city:
             continue
         try:
             if int(video.get('screen')) != int(screen):
@@ -511,7 +512,7 @@ def _get_videos_by_keyword_1_once(first_keyword, screen, location, audio_length,
                 pass
 
 
-def get_videos_by_keyword_1(first_keyword, screen, location, audio_length, poorTime=3, cate=None):
+def _get_videos_by_keyword_1_exact(first_keyword, screen, location, audio_length, poorTime=3, cate=None):
     if _database_in_cooldown():
         return _offline_material_candidates(
             first_keyword, screen, location, audio_length, poorTime, cate,
@@ -541,6 +542,45 @@ def get_videos_by_keyword_1(first_keyword, screen, location, audio_length, poorT
     return _offline_material_candidates(
         first_keyword, screen, location, audio_length, poorTime, cate,
     )
+
+
+def _material_keyword_variants(keyword):
+    """Return conservative trailing phrase fragments after an exact miss.
+
+    Chinese tags are often emitted as a compound place name even though the
+    indexed material stores only the scenic spot name. Try progressively
+    shorter trailing phrases (minimum three Han characters) without reducing
+    the category, city, screen, duration, or local-file filters.
+    """
+    keyword = str(keyword or '').strip()
+    if not keyword:
+        return []
+
+    variants = [keyword]
+    han_runs = re.findall(r'[\u4e00-\u9fff]{3,}', keyword)
+    if han_runs:
+        trailing_run = han_runs[-1]
+        if trailing_run != keyword and trailing_run not in variants:
+            variants.append(trailing_run)
+        for length in range(min(len(trailing_run) - 1, 8), 2, -1):
+            suffix = trailing_run[-length:]
+            if suffix not in variants:
+                variants.append(suffix)
+
+    return variants
+
+
+def get_videos_by_keyword_1(first_keyword, screen, location, audio_length, poorTime=3, cate=None):
+    """Find materials by exact keyword, then try bounded keyword suffixes."""
+    for keyword in _material_keyword_variants(first_keyword):
+        videos = _get_videos_by_keyword_1_exact(
+            keyword, screen, location, audio_length, poorTime, cate
+        )
+        if videos:
+            if keyword != first_keyword:
+                print(f'素材关键词未命中，使用较短关键词匹配：{first_keyword} -> {keyword}')
+            return videos
+    return []
 
 
 # 根据cn视频标签获取视频素材 id范围内
