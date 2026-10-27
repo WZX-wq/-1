@@ -126,13 +126,12 @@ def _offline_material_candidates(keyword, screen, location, audio_length,
     _load_material_index()
     allowed = {str(value) for value in allowed_ids} if allowed_ids is not None else None
     candidates = []
-    relaxed_candidates = []
-    unknown_local = []
-    cache_dirs = [Path(os.getcwd()) / name for name in _LOCAL_MATERIAL_DIR_NAMES]
     with _material_index_lock:
         records = list(_material_candidate_cache.items())
-    indexed_ids = {video_id for video_id, _video in records}
     for video_id, video in records:
+        # Offline selection must preserve the same constraints as the database
+        # query. In particular, never widen a category-specific query to other
+        # categories or treat an unindexed cache filename as a matching record.
         if allowed is not None and video_id not in allowed:
             continue
         path = _local_material_path(video_id)
@@ -153,36 +152,8 @@ def _offline_material_candidates(keyword, screen, location, audio_length,
         except (TypeError, ValueError):
             continue
         if cate is not None and str(video.get('material_category')) != str(cate):
-            relaxed_candidates.append(video)
             continue
         candidates.append(video)
-    if not candidates and relaxed_candidates:
-        candidates = relaxed_candidates
-        print(f'本地素材没有严格匹配类别“{cate}”，已按标签和画面参数继续匹配')
-    if not candidates:
-        for cache_dir in cache_dirs:
-            if not cache_dir.is_dir():
-                continue
-            for path in cache_dir.iterdir():
-                if not path.is_file() or path.suffix.lower() != '.mp4' or not path.stem.isdigit():
-                    continue
-                if path.stem in indexed_ids:
-                    continue
-                if allowed is not None and path.stem not in allowed:
-                    continue
-                unknown_local.append({
-                    'id': int(path.stem),
-                    'tags': '',
-                    'city': '',
-                    'screen': screen,
-                    'duration': audio_length,
-                    'material_category': cate,
-                    'local_only': True,
-                })
-    if not candidates:
-        candidates = unknown_local
-        if candidates:
-            print('本地素材标签索引没有匹配项，以下素材按编号随机兜底，无法保证与文案标签一致')
     random.shuffle(candidates)
     return candidates[:20]
 

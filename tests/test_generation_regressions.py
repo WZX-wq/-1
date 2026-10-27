@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import tempfile
@@ -275,21 +276,100 @@ class MaterialCandidateFilterTests(unittest.TestCase):
         self.assertEqual([video['id'] for video in result], [301])
         self.assertFalse(result[0].get('local_only', False))
 
-    def test_unindexed_local_videos_are_an_explicit_offline_fallback(self):
+    def test_offline_query_enforces_keyword_location_screen_duration_category_and_allowed_ids(self):
         with tempfile.TemporaryDirectory() as root:
             root_path = Path(root)
             cache_dir = root_path / 'cacheVideo'
             cache_dir.mkdir()
-            (cache_dir / '401.mp4').write_bytes(b'local-video')
+            records = [
+                {'id': 401, 'tags': '长沙_美食', 'city': '长沙', 'screen': 0,
+                 'duration': 8, 'material_category': '美食素材'},
+                {'id': 402, 'tags': '长沙_美食', 'city': '株洲', 'screen': 0,
+                 'duration': 8, 'material_category': '美食素材'},
+                {'id': 403, 'tags': '长沙_旅游', 'city': '长沙', 'screen': 0,
+                 'duration': 8, 'material_category': '美食素材'},
+                {'id': 404, 'tags': '长沙_美食', 'city': '长沙', 'screen': 1,
+                 'duration': 8, 'material_category': '美食素材'},
+                {'id': 405, 'tags': '长沙_美食', 'city': '长沙', 'screen': 0,
+                 'duration': 30, 'material_category': '美食素材'},
+                {'id': 406, 'tags': '长沙_美食', 'city': '长沙', 'screen': 0,
+                 'duration': 8, 'material_category': '三农素材'},
+                {'id': 407, 'tags': '长沙_美食', 'city': '长沙', 'screen': 0,
+                 'duration': 8, 'material_category': '美食素材'},
+                {'id': 409, 'tags': '长沙_美食', 'city': '长沙', 'screen': 0,
+                 'duration': 9, 'material_category': '美食素材'},
+                {'id': 410, 'tags': '长沙_美食', 'city': '长沙', 'screen': 0,
+                 'duration': 8, 'material_category': '美食素材'},
+            ]
+            for record in records:
+                (cache_dir / f"{record['id']}.mp4").write_bytes(b'local-video')
+            # This cache file has no indexed tags/category and must not be
+            # inferred to match from its numeric filename.
+            (cache_dir / '408.mp4').write_bytes(b'local-video')
+            (root_path / 'material_index.json').write_text(
+                json.dumps(records, ensure_ascii=False), encoding='utf-8'
+            )
             with patch.object(video_load_tool.os, 'getcwd', return_value=str(root_path)), \
-                    patch.object(video_load_tool, '_get_videos_by_keyword_1_once', return_value=None), \
-                    patch.object(video_load_tool.time, 'sleep'):
-                result = video_load_tool.get_videos_by_keyword_1(
-                    '没有索引的标签', 0, '', 8, 3, '普通素材'
+                    patch.object(video_load_tool, '_material_candidate_cache', {}), \
+                    patch.object(video_load_tool, '_material_index_loaded', False):
+                result = video_load_tool._offline_material_candidates(
+                    '美食', 0, '长沙', 8, poor_time=3, cate='美食素材',
+                    allowed_ids=[401, 402, 403, 404, 405, 406, 408, 409],
+                )
+                repeated_results = [
+                    video_load_tool._offline_material_candidates(
+                        '美食', 0, '长沙', 8, poor_time=3, cate='美食素材',
+                        allowed_ids=[401, 402, 403, 404, 405, 406, 408, 409],
+                    )
+                    for _ in range(20)
+                ]
+                excluded_by_allowed_ids = video_load_tool._offline_material_candidates(
+                    '美食', 0, '长沙', 8, poor_time=3, cate='美食素材',
+                    allowed_ids=[410],
                 )
 
-        self.assertEqual([video['id'] for video in result], [401])
-        self.assertTrue(result[0]['local_only'])
+        self.assertEqual({video['id'] for video in result}, {401, 409})
+        self.assertTrue(all(
+            {video['id'] for video in candidates} == {401, 409}
+            for candidates in repeated_results
+        ))
+        self.assertEqual({video['id'] for video in excluded_by_allowed_ids}, {410})
+
+    def test_unindexed_local_videos_are_not_used_as_offline_fallback(self):
+        with tempfile.TemporaryDirectory() as root:
+            root_path = Path(root)
+            cache_dir = root_path / 'cacheVideo'
+            cache_dir.mkdir()
+            (cache_dir / '501.mp4').write_bytes(b'local-video')
+            (root_path / 'material_index.json').write_text('[]', encoding='utf-8')
+            with patch.object(video_load_tool.os, 'getcwd', return_value=str(root_path)), \
+                    patch.object(video_load_tool, '_material_candidate_cache', {}), \
+                    patch.object(video_load_tool, '_material_index_loaded', False):
+                result = video_load_tool._offline_material_candidates(
+                    '没有索引的标签', 0, '', 8, cate='普通素材'
+                )
+
+        self.assertEqual(result, [])
+
+    def test_category_mismatch_is_not_used_as_offline_fallback(self):
+        with tempfile.TemporaryDirectory() as root:
+            root_path = Path(root)
+            cache_dir = root_path / 'cacheVideo'
+            cache_dir.mkdir()
+            (cache_dir / '601.mp4').write_bytes(b'local-video')
+            (root_path / 'material_index.json').write_text(
+                '[{"id":601,"tags":"长沙_美食","city":"长沙",'
+                '"screen":0,"duration":8,"material_category":"三农素材"}]',
+                encoding='utf-8',
+            )
+            with patch.object(video_load_tool.os, 'getcwd', return_value=str(root_path)), \
+                    patch.object(video_load_tool, '_material_candidate_cache', {}), \
+                    patch.object(video_load_tool, '_material_index_loaded', False):
+                result = video_load_tool._offline_material_candidates(
+                    '美食', 0, '长沙', 8, cate='美食素材'
+                )
+
+        self.assertEqual(result, [])
 
     def test_valid_cached_video_does_not_require_database_download_url(self):
         with tempfile.TemporaryDirectory() as root:

@@ -1,5 +1,5 @@
 {
-    "version": "2.4.13",
-    "build_date": "2026-10-26",
-    "description": "升级微软配音、随机音色选择并修复BGM重复中间文件"
+    "version": "2.4.14",
+    "build_date": "2026-10-27",
+    "description": "修复离线素材匹配回退，避免随机使用无关素材"
 }
